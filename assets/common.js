@@ -38,6 +38,31 @@ function houseEmptyOn(day) {
   return (window.HOUSE_EMPTY || []).find(a => inRange(day, a.start, a.end));
 }
 
+// Jours ouvrables de congé scolaire où A² est chez moi (ou en échange), avec leur solution de garde éventuelle.
+function childcareDays() {
+  const out = [];
+  (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances").forEach(h => {
+    for (let d = parse(h.start); iso(d) <= h.end; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+      const k = iso(d), c = custodyOn(k);
+      if (d.getDay() === 0 || d.getDay() === 6 || (c !== "moi" && c !== "echange")) continue;
+      const plan = (window.CHILDCARE_PLANS || []).find(p => inRange(k, p.start, p.end));
+      out.push({ date: k, holiday: h.name, exchange: c === "echange", solution: plan ? plan.solution : "" });
+    }
+  });
+  return out;
+}
+
+// Regroupe les jours sans solution en périodes consécutives (week-ends ignorés), par congé.
+function childcareGaps() {
+  const gaps = [];
+  childcareDays().filter(d => !d.solution).forEach(d => {
+    const g = gaps[gaps.length - 1];
+    const gapDays = g && g.holiday === d.holiday ? (parse(d.date) - parse(g.end)) / MS : 99;
+    if (gapDays <= 3) g.end = d.date; else gaps.push({ holiday: d.holiday, start: d.date, end: d.date });
+  });
+  return gaps;
+}
+
 function isCustodyEvent(e) {
   const c = window.CUSTODY;
   return !!(c && c.enabled && new RegExp(c.titleRegex).test(e.title));

@@ -31,6 +31,9 @@
 <script src="data/school-holidays.js"></script>
 <script src="data/people.js"></script>
 <script src="data/absences.js"></script>
+<script src="data/custody.js"></script>
+<script src="data/childcare.js"></script>
+<script src="data/calendar.js"></script>
 <script src="assets/common.js"></script>
 <script>
 nav("t");
@@ -52,14 +55,19 @@ function suggestions() {
     const weeks = h.name.includes("été") ? 10 : 4;
     const due = iso(new Date(parse(h.start) - weeks * 7 * MS));
     const label = h.name.replace(/ \(.*\)/, "");
-    [["Organiser la garde : " + label, "Garde"], ["Prévoir activités / stages : " + label, "Activités"]].forEach(([title, cat]) =>
+    [["Prévoir activités / stages : " + label, "Activités"]].forEach(([title, cat]) =>
       out.push({ title, cat, who: "famille", due: due < today ? today : due }));
+  });
+  childcareGaps().filter(g => g.end >= today).forEach(g => {
+    const due = iso(new Date(parse(g.start) - (g.holiday.includes("été") ? 56 : 28) * MS));
+    const label = g.start === g.end ? fmt(parse(g.start)) : `du ${fmt(parse(g.start))} au ${fmt(parse(g.end))}`;
+    out.push({ title: `Garde de A² chez Yves ${label} (${g.holiday.replace(/ \(.*\)/, "")})`, cat: "Garde", who: "moi", due: due < today ? today : due });
   });
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today).forEach(a => {
     const due = iso(new Date(parse(a.start) - 14 * MS));
     out.push({ title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: due < today ? today : due });
   });
-  return out.filter(s => !tasks.some(t => t.title === s.title)).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 8);
+  return out.filter(s => !tasks.some(t => t.title === s.title)).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 12);
 }
 
 function add(t) { tasks.push({ id: Date.now() + Math.random(), done: false, ...t }); save(); render(); }

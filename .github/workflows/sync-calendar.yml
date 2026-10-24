@@ -1,0 +1,29 @@
+name: Synchroniser les agendas
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save --no-package-lock ical.js@2.1.0
+      - name: Télécharger les agendas
+        env:
+          ICS_URLS: ${{ secrets.ICS_URLS }}
+        run: node scripts/fetch-calendar.mjs
+      - name: Enregistrer si modifié
+        run: |
+          git config user.name "calendar-sync"
+          git config user.email "calendar-sync@users.noreply.github.com"
+          git add data/calendar.js
+          git diff --cached --quiet || (git commit -m "Mise à jour des agendas" && git push)

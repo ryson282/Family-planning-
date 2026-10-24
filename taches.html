@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tâches familiales</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header><h1>Tâches familiales</h1></header>
+<main>
+  <section class="card">
+    <form class="add" id="f">
+      <input id="title" placeholder="Nouvelle tâche…" required>
+      <select id="who"></select>
+      <select id="cat"><option>Garde</option><option>École</option><option>Administratif</option><option>Santé</option><option>Activités</option><option>Autre</option></select>
+      <input id="due" type="date">
+      <button class="primary">Ajouter</button>
+    </form>
+  </section>
+  <section class="card" id="sugg" hidden>
+    <h2 style="margin-top:0;font-size:1.1rem">Suggestions d'après le calendrier</h2>
+    <ul class="list" id="suggList"></ul>
+  </section>
+  <section class="card">
+    <div class="bar"><h2>À faire</h2><select id="filter"><option value="">Toutes les personnes</option></select><label class="muted"><input type="checkbox" id="showDone"> voir les terminées</label></div>
+    <ul class="list" id="list"></ul>
+    <p class="muted">Les tâches sont enregistrées dans ce navigateur (par appareil).</p>
+  </section>
+</main>
+<script src="data/school-holidays.js"></script>
+<script src="data/people.js"></script>
+<script src="assets/common.js"></script>
+<script>
+nav("t");
+const KEY = "family-tasks-v1";
+let tasks = [];
+try { tasks = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch (e) {} };
+const people = [{ id: "famille", name: "Famille" }, ...window.PEOPLE];
+const opts = people.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+document.getElementById("who").innerHTML = opts;
+document.getElementById("filter").insertAdjacentHTML("beforeend", opts);
+const nameOf = id => (people.find(p => p.id === id) || {}).name || id;
+
+// Suggestions : à anticiper avant chaque période de vacances
+function suggestions() {
+  const today = iso(new Date());
+  const out = [];
+  (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances" && h.end >= today).forEach(h => {
+    const weeks = h.name.includes("été") ? 10 : 4;
+    const due = iso(new Date(parse(h.start) - weeks * 7 * MS));
+    const label = h.name.replace(/ \(.*\)/, "");
+    [["Organiser la garde : " + label, "Garde"], ["Prévoir activités / stages : " + label, "Activités"]].forEach(([title, cat]) =>
+      out.push({ title, cat, who: "famille", due: due < today ? today : due }));
+  });
+  return out.filter(s => !tasks.some(t => t.title === s.title)).slice(0, 6);
+}
+
+function add(t) { tasks.push({ id: Date.now() + Math.random(), done: false, ...t }); save(); render(); }
+
+function render() {
+  const f = document.getElementById("filter").value, sd = document.getElementById("showDone").checked, today = iso(new Date());
+  const rows = tasks.filter(t => (!f || t.who === f) && (sd || !t.done))
+    .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+  document.getElementById("list").innerHTML = rows.length ? rows.map(t => `
+    <li class="${t.done ? "done" : ""}"><input type="checkbox" data-id="${t.id}" ${t.done ? "checked" : ""}>
+    <span class="t">${esc(t.title)}</span><span class="tag">${esc(nameOf(t.who))}</span><span class="tag">${esc(t.cat)}</span>
+    <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? fmt(parse(t.due)) : ""}</span>
+    <button data-del="${t.id}" title="Supprimer">✕</button></li>`).join("") : `<li class="muted">Aucune tâche.</li>`;
+  const s = suggestions();
+  document.getElementById("sugg").hidden = !s.length;
+  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li><span class="t">${esc(x.title)}</span><span class="muted">avant le ${fmt(parse(x.due))}</span><button data-s="${i}">Ajouter</button></li>`).join("");
+  window._s = s;
+}
+
+document.getElementById("f").onsubmit = e => {
+  e.preventDefault();
+  add({ title: title.value.trim(), who: who.value, cat: cat.value, due: due.value });
+  e.target.reset();
+};
+document.addEventListener("click", e => {
+  const d = e.target.dataset;
+  if (d.del) { tasks = tasks.filter(t => String(t.id) !== d.del); save(); render(); }
+  if (d.s) add(window._s[d.s]);
+});
+document.addEventListener("change", e => {
+  if (e.target.dataset.id) { const t = tasks.find(t => String(t.id) === e.target.dataset.id); t.done = e.target.checked; save(); render(); }
+  else if (e.target.id === "filter" || e.target.id === "showDone") render();
+});
+render();
+</script>
+</body>
+</html>

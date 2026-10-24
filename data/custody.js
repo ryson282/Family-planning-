@@ -15,6 +15,7 @@ window.CUSTODY = {
   enabled: true,
   titleRegex: "^A²\\s*->\\s*(.+)$",
   me: "Yves",
+  other: "Emeline", // nom de l'autre parent dans les titres générés (export .ics)
   rules: {
     anchorWednesday: "2026-10-07", anchorParent: "moi",
     shortBreakFirst: "moi",

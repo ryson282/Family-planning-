@@ -21,3 +21,8 @@ Ne jamais mettre ces adresses dans le code. Ce dépôt doit rester **privé** (`
 ## Utilisation
 Ouvrir `index.html` dans un navigateur (ou servir le dossier avec `python3 -m http.server`).
 Les tâches sont stockées dans le navigateur (localStorage).
+
+## Export du planning de garde estimé vers Google Agenda
+`node scripts/export-ics.mjs` génère `export/garde-estimee.ics` (garde estimée par les règles de `data/custody.js`,
+après le dernier événement réel). Dans Google Agenda (ordinateur) : Paramètres → Importer et exporter → Importer,
+puis choisir l'agenda de destination. Les identifiants (UID) sont stables : réimporter le même fichier met à jour au lieu de dupliquer.

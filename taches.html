@@ -30,6 +30,7 @@
 </main>
 <script src="data/school-holidays.js"></script>
 <script src="data/people.js"></script>
+<script src="data/absences.js"></script>
 <script src="assets/common.js"></script>
 <script>
 nav("t");
@@ -54,7 +55,11 @@ function suggestions() {
     [["Organiser la garde : " + label, "Garde"], ["Prévoir activités / stages : " + label, "Activités"]].forEach(([title, cat]) =>
       out.push({ title, cat, who: "famille", due: due < today ? today : due }));
   });
-  return out.filter(s => !tasks.some(t => t.title === s.title)).slice(0, 6);
+  (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today).forEach(a => {
+    const due = iso(new Date(parse(a.start) - 14 * MS));
+    out.push({ title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: due < today ? today : due });
+  });
+  return out.filter(s => !tasks.some(t => t.title === s.title)).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 8);
 }
 
 function add(t) { tasks.push({ id: Date.now() + Math.random(), done: false, ...t }); save(); render(); }

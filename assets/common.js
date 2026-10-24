@@ -34,6 +34,10 @@ function custodyOn(day) {
   return who.size > 1 ? "echange" : who.size ? [...who][0] : null;
 }
 
+function houseEmptyOn(day) {
+  return (window.HOUSE_EMPTY || []).find(a => inRange(day, a.start, a.end));
+}
+
 function isCustodyEvent(e) {
   const c = window.CUSTODY;
   return !!(c && c.enabled && new RegExp(c.titleRegex).test(e.title));

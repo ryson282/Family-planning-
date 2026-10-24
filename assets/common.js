@@ -28,10 +28,48 @@ function custodyPeriods() {
   return _periods.sort((a, b) => a.start.localeCompare(b.start));
 }
 
-// "moi" | "autre" | "echange" (jour de passage) | null (inconnu)
+const addDays = (day, n) => { const d = parse(day); return iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); };
+const otherParent = w => (w === "moi" ? "autre" : "moi");
+
+// Planning de garde déduit des règles (voir data/custody.js) : "moi" | "autre" | null (hors calendriers scolaires connus).
+function ruleCustody(day) {
+  const c = window.CUSTODY, r = c && c.rules, hs = window.SCHOOL_HOLIDAYS || [];
+  if (!r) return null;
+  const known = hs.length && day <= hs[hs.length - 1].end;
+  if (!known) return null;
+  for (const h of hs) {
+    if (h.type !== "vacances") continue;
+    const year = parse(h.start).getFullYear();
+    if (/été/i.test(h.name)) {
+      const last = addDays(h.start, -1), cuts = [-2, 7, 23, 35, 51].map(n => addDays(last, n));
+      if (day >= cuts[0] && day < addDays(h.end, 3)) {
+        const first = (year - r.summer.year) % 2 === 0 ? r.summer.parent : otherParent(r.summer.parent);
+        return cuts.filter(x => x <= day).length % 2 === 1 ? first : otherParent(first);
+      }
+    } else if (day >= addDays(h.start, -3) && day <= addDays(h.end, 2)) {
+      if (/hiver|noël/i.test(h.name))
+        return (year - r.christmas.year) % 2 === 0 ? r.christmas.parent : otherParent(r.christmas.parent);
+      return day <= addDays(h.start, 4) ? r.shortBreakFirst : otherParent(r.shortBreakFirst);
+    }
+  }
+  const weeks = Math.floor((parse(day) - parse(r.anchorWednesday)) / (7 * MS));
+  return weeks % 2 === 0 ? r.anchorParent : otherParent(r.anchorParent);
+}
+
+function lastKnownCustodyDay() {
+  const p = custodyPeriods();
+  return p.length ? p.reduce((m, x) => (x.end > m ? x.end : m), "") : "";
+}
+
+// "moi" | "autre" | "echange" (jour de passage) | null (inconnu). Au-delà du dernier événement réel, on applique les règles.
 function custodyOn(day) {
   const who = new Set(custodyPeriods().filter(p => inRange(day, p.start, p.end)).map(p => p.who));
-  return who.size > 1 ? "echange" : who.size ? [...who][0] : null;
+  if (who.size) return who.size > 1 ? "echange" : [...who][0];
+  return custodyPeriods().length && day > lastKnownCustodyDay() ? ruleCustody(day) : null;
+}
+
+function custodyEstimated(day) {
+  return custodyPeriods().length > 0 && day > lastKnownCustodyDay() && custodyOn(day) !== null;
 }
 
 function houseEmptyOn(day) {

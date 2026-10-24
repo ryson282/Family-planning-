@@ -1,4 +1,4 @@
-// Calendrier scolaire FWB 2026-2027 (sources : RTBF, La Libre, août 2026).
+// Calendrier scolaire FWB 2026-2027 à 2028-2029 (sources : RTBF, La Libre).
 // Dates de fin incluses (vendredi). À confirmer sur enseignement.be.
 window.SCHOOL_HOLIDAYS = [
   { name: "Rentrée scolaire", start: "2026-08-24", end: "2026-08-24", type: "rentree" },
@@ -9,7 +9,24 @@ window.SCHOOL_HOLIDAYS = [
   { name: "Lundi de Pâques", start: "2027-03-29", end: "2027-03-29", type: "ferie" },
   { name: "Vacances de printemps (Pâques)", start: "2027-04-26", end: "2027-05-07", type: "vacances" },
   { name: "Fin des cours", start: "2027-07-02", end: "2027-07-02", type: "rentree" },
-  { name: "Vacances d'été", start: "2027-07-03", end: "2027-08-22", type: "vacances" }
+  { name: "Vacances d'été", start: "2027-07-03", end: "2027-08-29", type: "vacances" },
+
+  // 2027-2028 (RTBF) : rentrée 30 août 2027, fin des cours 7 juillet 2028
+  { name: "Rentrée scolaire", start: "2027-08-30", end: "2027-08-30", type: "rentree" },
+  { name: "Vacances d'automne (Toussaint)", start: "2027-10-25", end: "2027-11-05", type: "vacances" },
+  { name: "Vacances d'hiver (Noël)", start: "2027-12-27", end: "2028-01-07", type: "vacances" },
+  { name: "Congé de détente (Carnaval)", start: "2028-02-28", end: "2028-03-10", type: "vacances" },
+  { name: "Vacances de printemps (Pâques)", start: "2028-05-01", end: "2028-05-12", type: "vacances" },
+  { name: "Fin des cours", start: "2028-07-07", end: "2028-07-07", type: "rentree" },
+  { name: "Vacances d'été", start: "2028-07-08", end: "2028-08-27", type: "vacances" },
+
+  // 2028-2029 (RTBF) : rentrée 28 août 2028, fin des cours 6 juillet 2029
+  { name: "Rentrée scolaire", start: "2028-08-28", end: "2028-08-28", type: "rentree" },
+  { name: "Vacances d'automne (Toussaint)", start: "2028-10-23", end: "2028-11-03", type: "vacances" },
+  { name: "Vacances d'hiver (Noël)", start: "2028-12-25", end: "2029-01-05", type: "vacances" },
+  { name: "Congé de détente (Carnaval)", start: "2029-02-26", end: "2029-03-09", type: "vacances" },
+  { name: "Vacances de printemps (Pâques)", start: "2029-04-30", end: "2029-05-11", type: "vacances" },
+  { name: "Fin des cours", start: "2029-07-06", end: "2029-07-06", type: "rentree" }
 ];
 
 // Événements des agendas synchronisés déjà couverts par la liste ci-dessus (masqués pour éviter les doublons).

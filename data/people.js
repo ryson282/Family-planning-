@@ -7,3 +7,8 @@ window.PEOPLE = [
   { id: "lukas",   name: "Lukas (secondaire)", color: "#d98a1f", school: "Athénée royal de Waremme (secondaire)" },
   { id: "louanne", name: "Louanne (ULiège)",   color: "#8a5cd0", school: "Université de Liège (médecine vétérinaire, 1re année)" }
 ];
+
+// À qui appartiennent les événements de chaque agenda synchronisé (nom donné dans le secret ICS_URLS).
+window.CALENDAR_OWNERS = {
+  "Perso": "moi"
+};

@@ -11,19 +11,42 @@ function holidayOn(day) {
   return (window.SCHOOL_HOLIDAYS || []).find(h => inRange(day, h.start, h.end));
 }
 
-function custodyOn(day) {
+let _periods;
+function custodyPeriods() {
   const c = window.CUSTODY;
-  if (!c || !c.enabled) return null;
-  const o = (c.overrides || []).find(x => inRange(day, x.start, x.end));
-  if (o) return o.withMe;
-  const weeks = Math.floor((parse(day) - parse(c.startMonday)) / (7 * MS));
-  return weeks % 2 === 0;
+  if (_periods) return _periods;
+  _periods = [];
+  if (!c || !c.enabled) return _periods;
+  const re = new RegExp(c.titleRegex), seen = new Set();
+  (window.CALENDAR_EVENTS || []).forEach(e => {
+    const m = re.exec(e.title);
+    if (!m) return;
+    const p = { start: e.start.slice(0, 10), end: e.end.slice(0, 10), who: m[1].trim().toLowerCase() === c.me.toLowerCase() ? "moi" : "autre" };
+    const k = p.who + p.start + p.end;
+    if (!seen.has(k)) { seen.add(k); _periods.push(p); }
+  });
+  return _periods.sort((a, b) => a.start.localeCompare(b.start));
+}
+
+// "moi" | "autre" | "echange" (jour de passage) | null (inconnu)
+function custodyOn(day) {
+  const who = new Set(custodyPeriods().filter(p => inRange(day, p.start, p.end)).map(p => p.who));
+  return who.size > 1 ? "echange" : who.size ? [...who][0] : null;
+}
+
+function isCustodyEvent(e) {
+  const c = window.CUSTODY;
+  return !!(c && c.enabled && new RegExp(c.titleRegex).test(e.title));
+}
+
+function isHidden(e) {
+  return !!window.HIDE_CALENDAR_TITLES && new RegExp(window.HIDE_CALENDAR_TITLES, "i").test(e.title);
 }
 
 // Tous les événements ponctuels, normalisés : { date (début), end, title, source, person }
 function allEvents() {
   const out = [];
-  (window.CALENDAR_EVENTS || []).forEach(e => out.push({ date: e.start.slice(0, 10), end: (e.end || e.start).slice(0, 10), title: e.title, source: e.calendar, time: e.allDay ? "" : e.start.slice(11, 16) }));
+  (window.CALENDAR_EVENTS || []).filter(e => !isCustodyEvent(e) && !isHidden(e)).forEach(e => out.push({ date: e.start.slice(0, 10), end: (e.end || e.start).slice(0, 10), title: e.title, source: e.calendar, time: e.allDay ? "" : e.start.slice(11, 16) }));
   (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.date, title: e.title, source: "École", person: e.person }));
   return out;
 }

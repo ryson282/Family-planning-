@@ -1,11 +1,9 @@
-// Planning de garde. À compléter avec les vraies règles.
-// "weekly" : alternance par semaine, changement le lundi. startMonday = lundi d'une semaine "chez moi".
-// overrides : périodes où la règle ne s'applique pas (vacances, etc.).
+// Planning de garde, lu depuis les événements des agendas synchronisés.
+// Un événement dont le titre correspond à titleRegex indique chez qui sont les enfants ;
+// le groupe capturé est le nom du parent ("A²-> Yves" => Yves). "me" = votre nom dans ces titres.
+// Un jour couvert par les deux parents est un jour d'échange.
 window.CUSTODY = {
-  enabled: false,
-  mode: "weekly",
-  startMonday: "2026-10-26",
-  overrides: [
-    // { start: "2026-12-21", end: "2026-12-27", withMe: true, note: "Noël chez moi" }
-  ]
+  enabled: true,
+  titleRegex: "^A²\\s*->\\s*(.+)$",
+  me: "Yves"
 };

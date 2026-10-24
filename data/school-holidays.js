@@ -11,3 +11,6 @@ window.SCHOOL_HOLIDAYS = [
   { name: "Fin des cours", start: "2027-07-02", end: "2027-07-02", type: "rentree" },
   { name: "Vacances d'été", start: "2027-07-03", end: "2027-08-22", type: "vacances" }
 ];
+
+// Événements des agendas synchronisés déjà couverts par la liste ci-dessus (masqués pour éviter les doublons).
+window.HIDE_CALENDAR_TITLES = "^(Vacances|Congé|Armistice|Lundi de Pâques)";

@@ -5,6 +5,14 @@ const parse = s => { const [y, m, d] = s.slice(0, 10).split("-").map(Number); re
 const fmt = d => d.toLocaleDateString("fr-BE", { weekday: "short", day: "numeric", month: "short" });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// Congés récupérés automatiquement : ajoutés seulement après la dernière entrée saisie à la main.
+(function mergeAutoHolidays() {
+  const manual = window.SCHOOL_HOLIDAYS || [], auto = window.SCHOOL_HOLIDAYS_AUTO || [];
+  if (!auto.length) return;
+  const lastManual = manual.reduce((m, h) => (h.end > m ? h.end : m), "");
+  window.SCHOOL_HOLIDAYS = [...manual, ...auto.filter(h => h.start > lastManual)].sort((a, b) => a.start.localeCompare(b.start));
+})();
+
 function inRange(day, start, end) { return day >= start && day <= end; }
 
 function holidayOn(day) {

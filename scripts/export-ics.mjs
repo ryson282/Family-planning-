@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const ctx = vm.createContext({ window: {}, document: {} });
 ctx.window = ctx;
-for (const f of ["data/school-holidays.js", "data/custody.js", "data/calendar.js", "assets/common.js"])
+for (const f of ["data/school-holidays.js", "data/school-holidays-auto.js", "data/custody.js", "data/calendar.js", "assets/common.js"])
   vm.runInContext(readFileSync(f, "utf8"), ctx, { filename: f });
 const run = code => vm.runInContext(code, ctx);
 

@@ -47,8 +47,7 @@ function ruleCustody(day) {
         return cuts.filter(x => x <= day).length % 2 === 1 ? first : otherParent(first);
       }
     } else if (day >= addDays(h.start, -3) && day <= addDays(h.end, 2)) {
-      if (/hiver|noël/i.test(h.name))
-        return (year - r.christmas.year) % 2 === 0 ? r.christmas.parent : otherParent(r.christmas.parent);
+      if (/hiver|noël/i.test(h.name)) return r.christmas;
       return day <= addDays(h.start, 4) ? r.shortBreakFirst : otherParent(r.shortBreakFirst);
     }
   }

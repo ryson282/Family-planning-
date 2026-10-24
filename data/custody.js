@@ -8,7 +8,7 @@
 //  - semaines alternées, changement le mercredi ; anchorParent a la semaine qui commence le mercredi anchorWednesday ;
 //  - congés de 2 semaines (automne, détente, printemps) : shortBreakFirst a la 1re semaine
 //    (du vendredi avant le congé au vendredi de la 1re semaine), l'autre parent la 2e, puis l'alternance reprend ;
-//  - congé d'hiver : un seul parent pendant tout le congé, en alternance d'une année à l'autre ;
+//  - congé d'hiver (Noël) : toujours le même parent pendant tout le congé (christmas) ;
 //  - été : 5 blocs ~2 semaines à partir de la fin des cours, premier parent en alternance d'une année à l'autre.
 // Parents : "moi" ou "autre".
 window.CUSTODY = {
@@ -18,7 +18,7 @@ window.CUSTODY = {
   rules: {
     anchorWednesday: "2026-10-07", anchorParent: "moi",
     shortBreakFirst: "moi",
-    christmas: { year: 2026, parent: "autre" },
+    christmas: "autre",
     summer: { year: 2027, parent: "moi" }
   }
 };

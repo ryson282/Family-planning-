@@ -20,7 +20,7 @@ Ne jamais mettre ces adresses dans le code. Ce dépôt doit rester **privé** (`
 
 ## Utilisation
 Ouvrir `index.html` dans un navigateur (ou servir le dossier avec `python3 -m http.server`).
-Les tâches sont stockées dans le navigateur (localStorage).
+Les tâches sont stockées dans le navigateur (localStorage) ; elles peuvent être partagées entre appareils (voir ci-dessous).
 
 ## Export du planning de garde estimé vers Google Agenda
 `node scripts/export-ics.mjs` génère `export/garde-estimee.ics` (garde estimée par les règles de `data/custody.js`,
@@ -33,3 +33,17 @@ publiées à la fois) et écrit `data/school-holidays-auto.js`. (L'API OpenHolid
 que jusqu'en juillet 2027.) Les dates saisies à la main dans `data/school-holidays.js` restent prioritaires ; seules
 les périodes postérieures à sa dernière entrée sont ajoutées. Si la page est injoignable ou n'a plus la structure
 attendue, le workflow échoue (croix rouge) sans rien écrire.
+
+## Partager les tâches entre appareils (Supabase)
+Sans configuration, les tâches restent dans le navigateur de chaque appareil. Pour les partager (vous, Émilie, téléphone) :
+1. Créer un projet gratuit sur https://supabase.com (région Europe), puis dans **SQL Editor** exécuter :
+   ```sql
+   create table family_tasks (id text primary key, data jsonb not null);
+   alter table family_tasks enable row level security;
+   create policy "famille" on family_tasks for all to anon using (true) with check (true);
+   ```
+2. **Project Settings → API** : copier l'**adresse du projet** (`https://xxxx.supabase.co`) et la clé **anon public**.
+3. Page Tâches → « Synchronisation entre appareils » : coller les deux valeurs et **Enregistrer**, sur chaque appareil. Elles restent dans ce navigateur, jamais dans le code ni dans le dépôt.
+
+La synchronisation se fait au chargement, toutes les minutes et au retour sur la page ; la modification la plus récente gagne. Hors ligne, les tâches restent utilisables et sont renvoyées ensuite.
+Attention : toute personne qui possède l'adresse et la clé peut lire et modifier les tâches ; ne pas les partager. Il faut aussi que la page soit accessible sur chaque appareil (copie du dépôt ou hébergement).

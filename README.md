@@ -28,8 +28,8 @@ après le dernier événement réel). Dans Google Agenda (ordinateur) : Paramèt
 puis choisir l'agenda de destination. Les identifiants (UID) sont stables : réimporter le même fichier met à jour au lieu de dupliquer.
 
 ## Congés scolaires automatiques
-Le workflow « Congés scolaires » (1er de chaque mois, ou à la main dans l'onglet Actions) interroge l'API ouverte
-OpenHolidays pour la Fédération Wallonie-Bruxelles et écrit `data/school-holidays-auto.js`.
-Les dates saisies à la main dans `data/school-holidays.js` restent prioritaires ; seules les périodes postérieures
-à sa dernière entrée sont ajoutées. Si l'API est injoignable ou renvoie trop peu de données, le workflow échoue
-(croix rouge) sans rien écrire. Si la subdivision n'est pas détectée, définir `HOLIDAYS_SUBDIVISION` dans le workflow.
+Le workflow « Congés scolaires » (1er de chaque mois, ou à la main dans l'onglet Actions) lit la page « Calendrier scolaire » de www.enseignement.be (enseignement obligatoire, trois années scolaires
+publiées à la fois) et écrit `data/school-holidays-auto.js`. (L'API OpenHolidays a été écartée : elle ne publie la FWB
+que jusqu'en juillet 2027.) Les dates saisies à la main dans `data/school-holidays.js` restent prioritaires ; seules
+les périodes postérieures à sa dernière entrée sont ajoutées. Si la page est injoignable ou n'a plus la structure
+attendue, le workflow échoue (croix rouge) sans rien écrire.

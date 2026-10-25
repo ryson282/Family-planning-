@@ -2,7 +2,9 @@
 // (https://openholidaysapi.org) et écrit data/school-holidays-auto.js.
 // Les entrées saisies à la main dans data/school-holidays.js restent prioritaires : seules les périodes
 // POSTÉRIEURES à la dernière entrée manuelle sont ajoutées (voir assets/common.js).
-// Variables d'environnement : HOLIDAYS_SUBDIVISION (code de subdivision ou de groupe, sinon détection automatique).
+// L'API ne renvoie aucune subdivision pour la Belgique : la FWB est le GROUPE « BE-FR » (Communauté française),
+// les autres étant BE-NL (flamande) et BE-DE (germanophone). La plage d'une requête est limitée à 1095 jours.
+// Variables d'environnement : HOLIDAYS_SUBDIVISION (code de groupe/subdivision, par défaut BE-FR).
 import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -14,6 +16,8 @@ const KINDS = [
   [/p[aâ]ques|printemps|paas/i, "Vacances de printemps (Pâques)", "vacances"],
   [/[eé]t[eé]|zomer|summer/i, "Vacances d'été", "vacances"]
 ];
+const DEFAULT_SCOPE = "BE-FR";
+const MAX_DAYS = 1000; // < 1095, limite de l'API
 const DAY = 86400000;
 const toIso = d => d.toISOString().slice(0, 10);
 const shift = (s, n) => toIso(new Date(Date.parse(s + "T00:00:00Z") + n * DAY));
@@ -31,6 +35,11 @@ export function normalize(entries, subdivisionCode) {
     const kind = KINDS.find(([re]) => re.test(textOf(e)));
     if (!kind) { ignored.push(textOf(e)); continue; }
     let [, name, type] = kind, start = e.startDate, end = e.endDate;
+    if (/été/.test(name) && start === end) {
+      // « Début des vacances d'été » : un seul jour, sans date de rentrée connue -> seule la fin des cours est sûre.
+      out.push({ name: "Fin des cours", start: shift(start, -1), end: shift(start, -1), type: "rentree" });
+      continue;
+    }
     if (!/été/.test(name)) {
       // Congés de 2 semaines : lundi -> vendredi (l'API peut donner des week-ends).
       while ([0, 6].includes(dow(start))) start = shift(start, 1);
@@ -50,27 +59,27 @@ async function getJson(path) {
   return res.json();
 }
 
-// Cherche, parmi les subdivisions/groupes cités par les congés reçus, celui de la FWB.
-function findScope(entries) {
-  if (process.env.HOLIDAYS_SUBDIVISION) return process.env.HOLIDAYS_SUBDIVISION;
-  const scopes = new Map();
-  entries.forEach(e => scopesOf(e).forEach(s => scopes.set(s.code, `${textOf(s)} ${s.shortName || ""}`.trim())));
-  console.log("Subdivisions/groupes cités :", [...scopes].map(([c, n]) => `${c} (${n})`).join(", ") || "aucun");
-  const hit = [...scopes].find(([c, n]) => /wallon|fran[cç]ais|french|FWB|(^|-)FR$/i.test(c + " " + n));
-  return hit ? hit[0] : null;
+// Récupère les congés par tranches (l'API refuse plus de 1095 jours).
+async function getHolidays(from, to) {
+  const all = [];
+  for (let s = from; s <= to; s = shift(s, MAX_DAYS + 1)) {
+    const e = shift(s, MAX_DAYS) < to ? shift(s, MAX_DAYS) : to;
+    all.push(...await getJson(`/SchoolHolidays?countryIsoCode=BE&languageIsoCode=FR&validFrom=${s}&validTo=${e}`));
+  }
+  return [...new Map(all.map(e => [e.id, e])).values()];
 }
 
 async function main() {
   const from = toIso(new Date()), to = `${new Date().getUTCFullYear() + 4}-12-31`;
-  const data = await getJson(`/SchoolHolidays?countryIsoCode=BE&languageIsoCode=FR&validFrom=${from}&validTo=${to}`);
-  console.log(`${data.length} entrées reçues. Exemple : ${JSON.stringify(data[0])}`);
-  const code = findScope(data);
-  if (!code && !data.some(e => e.nationwide)) throw new Error("Périmètre FWB introuvable dans la réponse : définir HOLIDAYS_SUBDIVISION (voir les codes cités ci-dessus).");
-  console.log("Périmètre utilisé :", code || "national");
+  const data = await getHolidays(from, to);
+  const code = process.env.HOLIDAYS_SUBDIVISION || DEFAULT_SCOPE;
+  const cited = new Set(data.flatMap(e => scopesOf(e).map(s => s.code)));
+  console.log(`${data.length} entrées reçues ; périmètres cités : ${[...cited].join(", ") || "aucun"} ; utilisé : ${code}`);
+  if (!cited.has(code)) throw new Error(`Périmètre ${code} absent de la réponse : données non écrites.`);
   const { holidays, ignored } = normalize(data, code);
   if (ignored.length) console.log("Ignorés :", ignored.join(" ; "));
   if (holidays.filter(h => h.type === "vacances").length < 3) throw new Error(`Trop peu de congés reconnus (${holidays.length}) : données non écrites.`);
-  const js = `// Généré par scripts/fetch-holidays.mjs (API OpenHolidays, périmètre ${code || "national"}). Ne pas modifier à la main.\n` +
+  const js = `// Généré par scripts/fetch-holidays.mjs (API OpenHolidays, périmètre ${code}). Ne pas modifier à la main.\n` +
     `// Complète data/school-holidays.js pour les périodes postérieures à sa dernière entrée.\n` +
     `window.SCHOOL_HOLIDAYS_AUTO = ${JSON.stringify(holidays, null, 1).replace(/\n\s*/g, " ").replace(/\[ /, "[\n  ").replace(/}, \{/g, "},\n  {").replace(/ \]$/, "\n]")};\n`;
   writeFileSync("data/school-holidays-auto.js", js);

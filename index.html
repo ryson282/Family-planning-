@@ -44,7 +44,7 @@ const whoSel = document.getElementById("who");
 whoSel.insertAdjacentHTML("beforeend", PEOPLE.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join(""));
 whoSel.onchange = () => { render(); upcoming(); };
 document.getElementById("upd").insertAdjacentHTML("beforebegin", PEOPLE.map(p => `<span><i style="background:${p.color}"></i>${esc(p.name.replace(/ \(.*\)/, ""))}</span>`).join(""));
-const visible = e => !whoSel.value || !e.person || e.person === whoSel.value;
+const visible = e => !whoSel.value || !e.person || e.person.split(",").includes(whoSel.value);
 
 function render() {
   document.getElementById("title").textContent = cur.toLocaleDateString("fr-BE", { month: "long", year: "numeric" });

@@ -1,7 +1,8 @@
 // Événements de vie scolaire (réunions de parents, bulletins, excursions, examens ULiège...).
 // person : moi | emilie | alixia | adrian | lukas | louanne
+// person peut être une liste séparée par des virgules ("adrian,lukas").
 // end (optionnel, inclus) : pour un événement sur plusieurs jours.
-// Source : calendrier annuel 2026-2027 « Version Parents » de l'Athénée Royal de Waremme (primaire).
+// Sources : calendrier annuel 2026-2027 « Version Parents » (primaire) et vade-mecum parents 2026-2027 (secondaire, 3e année).
 window.SCHOOL_EVENTS = [
   { title: "Exercice incendie 1", date: "2026-10-07", person: "alixia" },
   { title: "Souper Halloween", date: "2026-10-09", person: "alixia" },
@@ -21,5 +22,22 @@ window.SCHOOL_EVENTS = [
   { title: "CEB", date: "2027-06-21", end: "2027-06-22", person: "alixia" },
   { title: "CEB", date: "2027-06-24", end: "2027-06-25", person: "alixia" },
   { title: "Bulletins, réunions de parents et cérémonie de passage P6", date: "2027-07-01", person: "alixia" },
-  { title: "Journée récréative", date: "2027-07-02", person: "alixia" }
+  { title: "Journée récréative", date: "2027-07-02", person: "alixia" },
+
+  // Secondaire, 3e année (Adrian et Lukas)
+  { title: "Photos scolaires", date: "2026-09-18", person: "adrian,lukas" },
+  { title: "Horaires définitifs en application", date: "2026-10-05", person: "adrian,lukas" },
+  { title: "Fin de la 1re période", date: "2026-11-10", person: "adrian,lukas" },
+  { title: "Bulletin 1", date: "2026-11-17", person: "adrian,lukas" },
+  { title: "Réunion de parents", date: "2026-11-23", person: "adrian,lukas" },
+  { title: "Fin de la 2e période", date: "2027-02-19", person: "adrian,lukas" },
+  { title: "Bulletin 2", date: "2027-03-19", person: "adrian,lukas" },
+  { title: "Réunion de parents", date: "2027-03-25", person: "adrian,lukas" },
+  { title: "Voyage Strasbourg–Colmar (3e)", date: "2027-04-20", end: "2027-04-23", person: "adrian,lukas" },
+  { title: "Fête scolaire", date: "2027-05-14", person: "adrian,lukas" },
+  { title: "Fin de la 3e période", date: "2027-06-01", person: "adrian,lukas" },
+  { title: "Révisions (2e et 3e degrés)", date: "2027-06-02", end: "2027-06-09", person: "adrian,lukas" },
+  { title: "Examens (2e et 3e degrés)", date: "2027-06-10", end: "2027-06-17", person: "adrian,lukas" },
+  { title: "Délibérations 3e année", date: "2027-06-25", person: "adrian,lukas" },
+  { title: "Bulletin 3 et réunion de parents", date: "2027-06-30", person: "adrian,lukas" }
 ];

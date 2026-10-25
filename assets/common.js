@@ -130,7 +130,7 @@ function allEvents() {
 }
 
 function personColor(id) {
-  const p = (window.PEOPLE || []).find(x => x.id === id);
+  const p = (window.PEOPLE || []).find(x => x.id === String(id).split(",")[0]);
   return p ? p.color : "var(--accent)";
 }
 

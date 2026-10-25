@@ -34,6 +34,7 @@
 <script src="data/absences.js"></script>
 <script src="data/custody.js"></script>
 <script src="data/childcare.js"></script>
+<script src="data/recurring-tasks.js"></script>
 <script src="data/calendar.js"></script>
 <script src="assets/common.js"></script>
 <script>
@@ -67,6 +68,14 @@ function suggestions() {
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today).forEach(a => {
     const due = iso(new Date(parse(a.start) - 14 * MS));
     out.push({ title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: due < today ? today : due });
+  });
+  // Tâches annuelles : prochaine occurrence du mois (le 1er, ou aujourd'hui si on y est déjà), visible 60 jours avant.
+  const now = new Date(), MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  (window.RECURRING_TASKS || []).forEach(r => {
+    let year = now.getFullYear();
+    if (r.month - 1 < now.getMonth()) year++;
+    const start = iso(new Date(year, r.month - 1, 1)), due = start < today ? today : start;
+    if (parse(start) - parse(today) <= 60 * MS) out.push({ title: `${r.title} (${MONTHS[r.month - 1]} ${year})`, cat: r.cat, who: r.who, due });
   });
   return out.filter(s => !tasks.some(t => t.title === s.title)).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 12);
 }

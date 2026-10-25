@@ -13,7 +13,7 @@
     <form class="add" id="f">
       <input id="title" placeholder="Nouvelle tâche…" required>
       <select id="who"></select>
-      <select id="cat"><option>Garde</option><option>École</option><option>Administratif</option><option>Santé</option><option>Activités</option><option>Autre</option></select>
+      <select id="cat"><option>Garde</option><option>École</option><option>Administratif</option><option>Santé</option><option>Activités</option><option>Vacances</option><option>Sorties</option><option>Maison</option><option>Autre</option></select>
       <input id="due" type="date">
       <button class="primary">Ajouter</button>
     </form>
@@ -74,7 +74,7 @@ function suggestions() {
   awayPeriods().filter(a => a.end >= today).forEach(a => {
     const summer = a.holiday.includes("été"), label = `du ${fmt(parse(a.start))} au ${fmt(parse(a.end))} (${a.holiday.replace(/ \(.*\)/, "")})`;
     const planDue = iso(new Date(parse(a.start) - (summer ? 16 : 8) * 7 * MS)), lanaDue = iso(new Date(parse(a.start) - (summer ? 8 : 4) * 7 * MS));
-    out.push({ title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie`, cat: "Activités", who: "famille", due: planDue < today ? today : planDue });
+    out.push({ title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie`, cat: "Vacances", who: "famille", due: planDue < today ? today : planDue });
     if (!(window.HOUSE_EMPTY || []).some(h => h.start <= a.end && h.end >= a.start))
       out.push({ title: `Garde de Lana si départ en vacances ${label}`, cat: "Garde", who: "lana", due: lanaDue < today ? today : lanaDue });
   });
@@ -112,16 +112,16 @@ function render() {
     .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
   document.getElementById("list").innerHTML = rows.length ? rows.map(t => `
     <li class="${t.done ? "done" : ""}"><input type="checkbox" data-id="${t.id}" ${t.done ? "checked" : ""}>
-    <span class="t">${esc(t.title)}</span><span class="tag">${esc(nameOf(t.who))}</span><span class="tag">${esc(t.cat)}</span>
+    <span class="t">${esc(t.title)}</span><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
     <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? fmt(parse(t.due)) : ""}</span>
     <button data-del="${t.id}" title="Supprimer">✕</button></li>`).join("") : `<li class="muted">Aucune tâche.</li>`;
   const s = suggestions();
   document.getElementById("sugg").hidden = !s.length;
-  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li><span class="t">${esc(x.title)}</span><span class="muted">avant le ${fmt(parse(x.due))}</span><button data-s="${i}">Ajouter</button></li>`).join("");
+  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li><span class="t">${esc(x.title)}</span>${catTag(x.cat)}<span class="muted">avant le ${fmt(parse(x.due))}</span><button data-s="${i}">Ajouter</button></li>`).join("");
   window._s = s;
   const o = outings();
   document.getElementById("out").hidden = !o.length;
-  document.getElementById("outList").innerHTML = o.map((x, i) => `<li><span class="t">${esc(x.text)}</span><button data-o="${i}">Ajouter</button></li>`).join("");
+  document.getElementById("outList").innerHTML = o.map((x, i) => `<li><span class="t">${esc(x.text)}</span>${catTag("Sorties")}<button data-o="${i}">Ajouter</button></li>`).join("");
   window._o = o;
 }
 
@@ -134,7 +134,7 @@ document.addEventListener("click", e => {
   const d = e.target.dataset;
   if (d.del) { tasks = tasks.filter(t => String(t.id) !== d.del); save(); render(); }
   if (d.s) add(window._s[d.s]);
-  if (d.o) { const o = window._o[d.o]; add({ title: o.title, who: "moi", cat: "Activités", due: o.due }); }
+  if (d.o) { const o = window._o[d.o]; add({ title: o.title, who: "moi", cat: "Sorties", due: o.due }); }
 });
 document.addEventListener("change", e => {
   if (e.target.dataset.id) { const t = tasks.find(t => String(t.id) === e.target.dataset.id); t.done = e.target.checked; save(); render(); }

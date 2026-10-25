@@ -87,18 +87,31 @@ function houseEmptyOn(day) {
   return (window.HOUSE_EMPTY || []).find(a => inRange(day, a.start, a.end));
 }
 
-// Jours ouvrables de congé scolaire où A² est chez moi (ou en échange), avec leur solution de garde éventuelle.
+// Jours fériés et congés isolés (Armistice, lundi de Pâques, « Congé : Mardi gras » des événements scolaires...).
+function daysOff() {
+  const seen = new Set(), out = [];
+  const push = (date, name) => { if (!seen.has(date)) { seen.add(date); out.push({ date, name }); } };
+  (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "ferie").forEach(h => {
+    for (let k = h.start; k <= h.end; k = addDays(k, 1)) push(k, h.name);
+  });
+  (window.SCHOOL_EVENTS || []).filter(e => /^Congé : /.test(e.title)).forEach(e => push(e.date, e.title.replace(/^Congé : /, "")));
+  return out;
+}
+
+// Jours ouvrables de congé scolaire ou férié où A² est chez moi (ou en échange), avec leur solution de garde éventuelle.
 function childcareDays() {
   const out = [];
+  const add = (k, label) => {
+    const d = parse(k), c = custodyOn(k);
+    if (d.getDay() === 0 || d.getDay() === 6 || (c !== "moi" && c !== "echange")) return;
+    const plan = (window.CHILDCARE_PLANS || []).find(p => inRange(k, p.start, p.end));
+    out.push({ date: k, holiday: label, exchange: c === "echange", solution: plan ? plan.solution : "" });
+  };
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances").forEach(h => {
-    for (let d = parse(h.start); iso(d) <= h.end; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
-      const k = iso(d), c = custodyOn(k);
-      if (d.getDay() === 0 || d.getDay() === 6 || (c !== "moi" && c !== "echange")) continue;
-      const plan = (window.CHILDCARE_PLANS || []).find(p => inRange(k, p.start, p.end));
-      out.push({ date: k, holiday: h.name, exchange: c === "echange", solution: plan ? plan.solution : "" });
-    }
+    for (let k = h.start; k <= h.end; k = addDays(k, 1)) add(k, h.name);
   });
-  return out;
+  daysOff().forEach(o => { if (!holidayOn(o.date) || holidayOn(o.date).type === "ferie") add(o.date, o.name); });
+  return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // Regroupe les jours sans solution en périodes consécutives (week-ends ignorés), par congé.
@@ -110,6 +123,36 @@ function childcareGaps() {
     if (gapDays <= 3) g.end = d.date; else gaps.push({ holiday: d.holiday, start: d.date, end: d.date });
   });
   return gaps;
+}
+
+// Périodes de congé scolaire où A² n'est PAS chez moi (week-ends adjacents inclus, au moins 4 jours) : départ en vacances possible.
+function awayPeriods() {
+  const out = [];
+  (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances").forEach(h => {
+    let run = null;
+    const close = () => { if (run && run.days >= 4) out.push(run); run = null; };
+    for (let k = addDays(h.start, -2); k <= addDays(h.end, 2); k = addDays(k, 1)) {
+      if (custodyOn(k) === "autre") { if (run) { run.end = k; run.days++; } else run = { holiday: h.name, start: k, end: k, days: 1 }; }
+      else close();
+    }
+    close();
+  });
+  return out;
+}
+
+// Fenêtres pour sortir avec Émilie dans les `horizon` prochains jours : semaines où A² est chez l'autre parent
+// (soirées et week-end libres) et périodes de stage/garde organisée (journées libres).
+function outingWindows(today, horizon) {
+  const limit = addDays(today, horizon), out = [];
+  let run = null;
+  const close = () => { if (run) out.push(run); run = null; };
+  for (let k = today; k <= limit; k = addDays(k, 1)) {
+    if (custodyOn(k) === "autre") { if (run) run.end = k; else run = { kind: "absents", start: k, end: k }; } else close();
+  }
+  close();
+  (window.CHILDCARE_PLANS || []).filter(p => p.end >= today && p.start <= limit)
+    .forEach(p => out.push({ kind: "occupes", start: p.start < today ? today : p.start, end: p.end, note: p.solution }));
+  return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
 function isCustodyEvent(e) {

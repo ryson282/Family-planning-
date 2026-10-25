@@ -125,7 +125,7 @@ function isHidden(e) {
 function allEvents() {
   const out = [];
   (window.CALENDAR_EVENTS || []).filter(e => !isCustodyEvent(e) && !isHidden(e)).forEach(e => out.push({ date: e.start.slice(0, 10), end: (e.end || e.start).slice(0, 10), title: e.title, source: e.calendar, person: (window.CALENDAR_OWNERS || {})[e.calendar], time: e.allDay ? "" : e.start.slice(11, 16) }));
-  (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.date, title: e.title, source: "École", person: e.person }));
+  (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.end || e.date, title: e.title, source: "École", person: e.person }));
   return out;
 }
 

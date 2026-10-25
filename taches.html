@@ -39,6 +39,7 @@
 <script src="data/absences.js"></script>
 <script src="data/custody.js"></script>
 <script src="data/childcare.js"></script>
+<script src="data/school-events.js"></script>
 <script src="data/recurring-tasks.js"></script>
 <script src="data/calendar.js"></script>
 <script src="assets/common.js"></script>
@@ -74,7 +75,7 @@ function suggestions() {
   awayPeriods().filter(a => a.end >= today).forEach(a => {
     const summer = a.holiday.includes("été"), label = `du ${fmt(parse(a.start))} au ${fmt(parse(a.end))} (${a.holiday.replace(/ \(.*\)/, "")})`;
     const planDue = iso(new Date(parse(a.start) - (summer ? 16 : 8) * 7 * MS)), lanaDue = iso(new Date(parse(a.start) - (summer ? 8 : 4) * 7 * MS));
-    out.push({ title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie`, cat: "Vacances", who: "famille", due: planDue < today ? today : planDue });
+    out.push({ title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie${a.louanne ? " — " + a.louanne : ""}`, cat: "Vacances", who: "famille", due: planDue < today ? today : planDue });
     if (!(window.HOUSE_EMPTY || []).some(h => h.start <= a.end && h.end >= a.start))
       out.push({ title: `Garde de Lana si départ en vacances ${label}`, cat: "Garde", who: "lana", due: lanaDue < today ? today : lanaDue });
   });

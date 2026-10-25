@@ -125,12 +125,30 @@ function childcareGaps() {
   return gaps;
 }
 
+// Louanne (ULiège) : libre pendant ses vacances/congés (événements scolaires « ULiège : vacances… » ou « ULiège : congé… »).
+// Ne renseigne que la période couverte par ces événements ; en dehors, la disponibilité est inconnue.
+function louanneNote(start, end) {
+  const ev = (window.SCHOOL_EVENTS || []).filter(e => e.person === "louanne" && e.title.startsWith("ULiège"));
+  if (!ev.length) return "";
+  const from = ev.reduce((m, e) => (e.date < m ? e.date : m), "9999"), to = ev.reduce((m, e) => ((e.end || e.date) > m ? (e.end || e.date) : m), "");
+  const breaks = ev.filter(e => /^ULiège : (vacances|congé)/.test(e.title));
+  let known = 0, busy = 0;
+  for (let k = start; k <= end; k = addDays(k, 1)) {
+    const dw = parse(k).getDay();
+    if (dw === 0 || dw === 6 || k < from || k > to) continue;
+    known++;
+    if (!breaks.some(e => inRange(k, e.date, e.end || e.date))) busy++;
+  }
+  if (!known) return "";
+  return busy === 0 ? "Louanne libre" : busy === known ? "Louanne en cours ou examens" : `Louanne libre sauf ${busy} jour${busy > 1 ? "s" : ""} de cours ou d'examens`;
+}
+
 // Périodes de congé scolaire où A² n'est PAS chez moi (week-ends adjacents inclus, au moins 4 jours) : départ en vacances possible.
 function awayPeriods() {
   const out = [];
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances").forEach(h => {
     let run = null;
-    const close = () => { if (run && run.days >= 4) out.push(run); run = null; };
+    const close = () => { if (run && run.days >= 4) out.push({ ...run, louanne: louanneNote(run.start, run.end) }); run = null; };
     for (let k = addDays(h.start, -2); k <= addDays(h.end, 2); k = addDays(k, 1)) {
       if (custodyOn(k) === "autre") { if (run) { run.end = k; run.days++; } else run = { holiday: h.name, start: k, end: k, days: 1 }; }
       else close();

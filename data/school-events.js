@@ -57,6 +57,7 @@ window.SCHOOL_EVENTS = [
   { title: "ULiège : concours de fin de 1er bachelier", date: "2027-06-25", person: "louanne" },
   { title: "ULiège : délibération du 1er bloc (9 h)", date: "2027-06-30", person: "louanne" },
   { title: "ULiège : proclamation du 1er bloc (9 h)", date: "2027-07-02", person: "louanne" },
+  { title: "ULiège : vacances d'été", date: "2027-07-01", end: "2027-08-14", person: "louanne" },
   { title: "ULiège : session d'août (2e session)", date: "2027-08-16", end: "2027-09-04", person: "louanne" },
   { title: "ULiège : délibération du 1er bloc, 2e session (9 h)", date: "2027-09-02", person: "louanne" },
   { title: "ULiège : proclamation du 1er bloc, 2e session (9 h)", date: "2027-09-03", person: "louanne" }

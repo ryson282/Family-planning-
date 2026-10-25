@@ -14,9 +14,12 @@ window.SCHOOL_EVENTS = [
   { title: "Congé : Mardi gras", date: "2027-02-09", person: "alixia" },
   { title: "Carnaval des enfants", date: "2027-02-12", person: "alixia" },
   { title: "Bulletin 2", date: "2027-03-18", person: "alixia" },
+  { title: "Classes de neige P5/P6", date: "2027-03-19", end: "2027-03-29", person: "alixia" },
   { title: "Réunions de parents", date: "2027-03-30", person: "alixia" },
   { title: "Fête de l'école", date: "2027-05-15", person: "alixia" },
   { title: "Congé : Pentecôte", date: "2027-05-17", person: "alixia" },
-  { title: "Bulletins + réunions de parents", date: "2027-07-01", person: "alixia" },
+  { title: "CEB", date: "2027-06-21", end: "2027-06-22", person: "alixia" },
+  { title: "CEB", date: "2027-06-24", end: "2027-06-25", person: "alixia" },
+  { title: "Bulletins, réunions de parents et cérémonie de passage P6", date: "2027-07-01", person: "alixia" },
   { title: "Journée récréative", date: "2027-07-02", person: "alixia" }
 ];

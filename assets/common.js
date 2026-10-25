@@ -68,15 +68,19 @@ function lastKnownCustodyDay() {
   return p.length ? p.reduce((m, x) => (x.end > m ? x.end : m), "") : "";
 }
 
-// "moi" | "autre" | "echange" (jour de passage) | null (inconnu). Au-delà du dernier événement réel, on applique les règles.
+const custodyCovered = day => custodyPeriods().some(p => inRange(day, p.start, p.end));
+
+// "moi" | "autre" | "echange" (jour de passage) | null (inconnu). Tout jour sans événement réel, à partir du premier
+// événement connu, est estimé par les règles (y compris les trous entre deux événements réels éloignés).
 function custodyOn(day) {
   const who = new Set(custodyPeriods().filter(p => inRange(day, p.start, p.end)).map(p => p.who));
   if (who.size) return who.size > 1 ? "echange" : [...who][0];
-  return custodyPeriods().length && day > lastKnownCustodyDay() ? ruleCustody(day) : null;
+  const first = custodyPeriods()[0];
+  return first && day >= first.start ? ruleCustody(day) : null;
 }
 
 function custodyEstimated(day) {
-  return custodyPeriods().length > 0 && day > lastKnownCustodyDay() && custodyOn(day) !== null;
+  return custodyPeriods().length > 0 && !custodyCovered(day) && custodyOn(day) !== null;
 }
 
 function houseEmptyOn(day) {

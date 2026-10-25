@@ -1,85 +1,88 @@
-// Récupère les congés scolaires de la Fédération Wallonie-Bruxelles via l'API ouverte OpenHolidays
-// (https://openholidaysapi.org) et écrit data/school-holidays-auto.js.
+// Récupère les congés scolaires de la Fédération Wallonie-Bruxelles sur www.enseignement.be
+// (page « Calendrier scolaire », enseignement obligatoire) et écrit data/school-holidays-auto.js.
 // Les entrées saisies à la main dans data/school-holidays.js restent prioritaires : seules les périodes
 // POSTÉRIEURES à la dernière entrée manuelle sont ajoutées (voir assets/common.js).
-// L'API ne renvoie aucune subdivision pour la Belgique : la FWB est le GROUPE « BE-FR » (Communauté française),
-// les autres étant BE-NL (flamande) et BE-DE (germanophone). La plage d'une requête est limitée à 1095 jours.
-// Variables d'environnement : HOLIDAYS_SUBDIVISION (code de groupe/subdivision, par défaut BE-FR).
+// La page publie trois années scolaires à la fois ; les suivantes apparaissent au fil du temps.
 import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const API = "https://openholidaysapi.org";
+const URL_PAGE = "https://www.enseignement.be/index.php?page=23953";
+const MONTHS = { janvier: 1, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6, juillet: 7, aout: 8, septembre: 9, octobre: 10, novembre: 11, decembre: 12 };
 const KINDS = [
-  [/toussaint|automne|herfst/i, "Vacances d'automne (Toussaint)", "vacances"],
-  [/no[eë]l|hiver|kerst/i, "Vacances d'hiver (Noël)", "vacances"],
-  [/carnaval|d[eé]tente|krokus/i, "Congé de détente (Carnaval)", "vacances"],
-  [/p[aâ]ques|printemps|paas/i, "Vacances de printemps (Pâques)", "vacances"],
-  [/[eé]t[eé]|zomer|summer/i, "Vacances d'été", "vacances"]
+  [/vacances d'automne/i, "Vacances d'automne (Toussaint)"],
+  [/vacances d'hiver/i, "Vacances d'hiver (Noël)"],
+  [/vacances de d[ée]tente/i, "Congé de détente (Carnaval)"],
+  [/vacances de printemps/i, "Vacances de printemps (Pâques)"]
 ];
-const DEFAULT_SCOPE = "BE-FR";
-const MAX_DAYS = 1000; // < 1095, limite de l'API
 const DAY = 86400000;
 const toIso = d => d.toISOString().slice(0, 10);
 const shift = (s, n) => toIso(new Date(Date.parse(s + "T00:00:00Z") + n * DAY));
 const dow = s => new Date(s + "T00:00:00Z").getUTCDay(); // 0 = dimanche
+const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const iso = (d, m, y) => `${y}-${String(MONTHS[norm(m)]).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
-const scopesOf = e => [...(e.subdivisions || []), ...(e.groups || [])];
-const textOf = e => (e.name || []).map(n => n.text).join(" ");
+// Transforme le HTML de la page en texte brut sur une ligne.
+const toText = html => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ")
+  .replace(/&nbsp;/g, " ").replace(/&#0?39;|&rsquo;|’/g, "'").replace(/&eacute;/g, "é").replace(/&egrave;/g, "è").replace(/&amp;/g, "&")
+  .replace(/\s+/g, " ").replace(/(\d)\s*(?:er|ER)\b/g, "$1");
 
-// Convertit la réponse de l'API au format de data/school-holidays.js.
-export function normalize(entries, subdivisionCode) {
-  const out = [], ignored = [];
-  for (const e of entries) {
-    const scoped = e.nationwide || scopesOf(e).some(s => s.code === subdivisionCode);
-    if (!scoped) continue;
-    const kind = KINDS.find(([re]) => re.test(textOf(e)));
-    if (!kind) { ignored.push(textOf(e)); continue; }
-    let [, name, type] = kind, start = e.startDate, end = e.endDate;
-    if (/été/.test(name) && start === end) {
-      // « Début des vacances d'été » : un seul jour, sans date de rentrée connue -> seule la fin des cours est sûre.
-      out.push({ name: "Fin des cours", start: shift(start, -1), end: shift(start, -1), type: "rentree" });
-      continue;
+const DATE = "(?:\\p{L}+) (\\d{1,2}) (\\p{L}+) (\\d{4})";
+
+// Extrait, pour chaque année scolaire de l'enseignement obligatoire, rentrée / congés / début des vacances d'été.
+export function parse(html) {
+  const text = toText(html), years = [], warnings = [];
+  for (const chunk of text.split(/Calendrier de l'enseignement obligatoire (?=\d{4}-\d{4})/).slice(1)) {
+    const body = chunk.split(/Documents|Calendrier des? acad/)[0];
+    const rentree = body.match(new RegExp(`Rentr[ée]e scolaire ${DATE}`, "iu"));
+    if (!rentree) continue; // simple lien du menu
+    const year = { rentree: iso(rentree[1], rentree[2], rentree[3]), vacances: [], ete: null };
+    for (const [re, name] of KINDS) {
+      const m = body.match(new RegExp(`${re.source}(?: \\([^)]*\\))? Du ${DATE} au ${DATE}`, "iu"));
+      if (!m) continue;
+      let start = iso(m[1], m[2], m[3]); const end = iso(m[4], m[5], m[6]);
+      if (start > end) { // faute de saisie constatée sur le site (ex. « 25 décembre 2029 au 7 janvier 2029 »)
+        warnings.push(`${name} : « ${m[0]} » incohérent, année de début corrigée`);
+        start = `${Number(start.slice(0, 4)) - 1}${start.slice(4)}`;
+      }
+      year.vacances.push({ name, start, end });
     }
-    if (!/été/.test(name)) {
-      // Congés de 2 semaines : lundi -> vendredi (l'API peut donner des week-ends).
+    const ete = body.match(new RegExp(`vacances d'[ée]t[ée] d[ée]butent le ${DATE}`, "iu"));
+    if (ete) year.ete = iso(ete[1], ete[2], ete[3]);
+    years.push(year);
+  }
+  return { years, warnings };
+}
+
+// Convertit au format de data/school-holidays.js : congés de 2 semaines du lundi au vendredi.
+export function build(years) {
+  const out = [];
+  years.sort((a, b) => a.rentree.localeCompare(b.rentree)).forEach((y, i, all) => {
+    out.push({ name: "Rentrée scolaire", start: y.rentree, end: y.rentree, type: "rentree" });
+    for (const v of y.vacances) {
+      let { start, end } = v;
       while ([0, 6].includes(dow(start))) start = shift(start, 1);
       while ([0, 6].includes(dow(end))) end = shift(end, -1);
-    } else {
-      out.push({ name: "Fin des cours", start: shift(start, -1), end: shift(start, -1), type: "rentree" });
-      out.push({ name: "Rentrée scolaire", start: shift(end, 1), end: shift(end, 1), type: "rentree" });
+      out.push({ name: v.name, start, end, type: "vacances" });
     }
-    out.push({ name, start, end, type });
-  }
-  return { holidays: out.sort((a, b) => a.start.localeCompare(b.start)), ignored };
-}
-
-async function getJson(path) {
-  const res = await fetch(API + path, { headers: { accept: "application/json" } });
-  if (!res.ok) throw new Error(`HTTP ${res.status} pour ${path}`);
-  return res.json();
-}
-
-// Récupère les congés par tranches (l'API refuse plus de 1095 jours).
-async function getHolidays(from, to) {
-  const all = [];
-  for (let s = from; s <= to; s = shift(s, MAX_DAYS + 1)) {
-    const e = shift(s, MAX_DAYS) < to ? shift(s, MAX_DAYS) : to;
-    all.push(...await getJson(`/SchoolHolidays?countryIsoCode=BE&languageIsoCode=FR&validFrom=${s}&validTo=${e}`));
-  }
-  return [...new Map(all.map(e => [e.id, e])).values()];
+    if (y.ete) {
+      out.push({ name: "Fin des cours", start: shift(y.ete, -1), end: shift(y.ete, -1), type: "rentree" });
+      const next = all[i + 1]; // l'été dure jusqu'à la veille de la rentrée suivante, si elle est connue
+      if (next) out.push({ name: "Vacances d'été", start: y.ete, end: shift(next.rentree, -1), type: "vacances" });
+    }
+  });
+  return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
 async function main() {
-  const from = toIso(new Date()), to = `${new Date().getUTCFullYear() + 4}-12-31`;
-  const data = await getHolidays(from, to);
-  const code = process.env.HOLIDAYS_SUBDIVISION || DEFAULT_SCOPE;
-  const cited = new Set(data.flatMap(e => scopesOf(e).map(s => s.code)));
-  console.log(`${data.length} entrées reçues ; périmètres cités : ${[...cited].join(", ") || "aucun"} ; utilisé : ${code}`);
-  if (!cited.has(code)) throw new Error(`Périmètre ${code} absent de la réponse : données non écrites.`);
-  const { holidays, ignored } = normalize(data, code);
-  if (ignored.length) console.log("Ignorés :", ignored.join(" ; "));
-  if (holidays.filter(h => h.type === "vacances").length < 3) throw new Error(`Trop peu de congés reconnus (${holidays.length}) : données non écrites.`);
-  const js = `// Généré par scripts/fetch-holidays.mjs (API OpenHolidays, périmètre ${code}). Ne pas modifier à la main.\n` +
+  const res = await fetch(URL_PAGE, { headers: { "user-agent": "family-planning-holidays-sync" } });
+  if (!res.ok) throw new Error(`HTTP ${res.status} pour ${URL_PAGE}`);
+  const { years, warnings } = parse(await res.text());
+  warnings.forEach(w => console.log("Attention :", w));
+  console.log(`${years.length} année(s) scolaire(s) trouvée(s) : ${years.map(y => y.rentree).join(", ")}`);
+  const incomplete = years.filter(y => y.vacances.length < 4 || !y.ete);
+  if (!years.length || incomplete.length) throw new Error(`Page enseignement.be non reconnue ou incomplète (${incomplete.map(y => y.rentree).join(", ") || "aucune année"}) : données non écrites.`);
+  const holidays = build(years);
+  const js = `// Généré par scripts/fetch-holidays.mjs (source : www.enseignement.be, enseignement obligatoire). Ne pas modifier à la main.\n` +
     `// Complète data/school-holidays.js pour les périodes postérieures à sa dernière entrée.\n` +
     `window.SCHOOL_HOLIDAYS_AUTO = ${JSON.stringify(holidays, null, 1).replace(/\n\s*/g, " ").replace(/\[ /, "[\n  ").replace(/}, \{/g, "},\n  {").replace(/ \]$/, "\n]")};\n`;
   writeFileSync("data/school-holidays-auto.js", js);

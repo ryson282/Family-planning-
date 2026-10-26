@@ -15,7 +15,7 @@ window.SCHEDULES = {
   emilie: {
     work: { start: "08:00", place: "Saint-Georges-sur-Meuse" },
     homeByDay: { 2: ["16:30", "17:00"], 4: ["16:30", "17:00"] },
-    activities: [{ name: "Pilates (avec Louanne)", days: [3], start: "19:00", end: "20:25", note: "rentrées à la maison vers 20 h 25 en général" }]
+    activities: [{ name: "Pilates (avec Louanne)", days: [3], start: "19:00", end: "20:25", by: "voiture", note: "en voiture ; rentrées à la maison vers 20 h 25 en général" }]
   },
   // Lukas : école 8 h 25, fin 16 h (mercredi 12 h). Piscine le vendredi, conduite par Yves qui travaille depuis la cafétéria.
   // La piscine s'arrête pendant tous les congés scolaires.
@@ -49,7 +49,7 @@ window.SCHEDULES = {
     activities: [
       { name: "Solfège", days: [1], start: "19:10", end: "20:50", walking: true },
       { name: "Piano", days: [4], start: "20:00", end: "20:50", walking: true },
-      { name: "Pilates (avec Émilie)", days: [3], start: "19:00", end: "20:25", note: "rentrées à la maison vers 20 h 25 en général" }
+      { name: "Pilates (avec Émilie)", days: [3], start: "19:00", end: "20:25", by: "voiture", note: "en voiture ; rentrées à la maison vers 20 h 25 en général" }
     ] // liste incomplète : d'autres activités à ajouter
   },
   // Enchaînements types de la semaine.

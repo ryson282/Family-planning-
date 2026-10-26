@@ -22,7 +22,9 @@ window.SCHEDULES = {
     },
     activities: [
       { name: "Pilates (avec Louanne)", days: [3], start: "19:00", end: "20:25", by: "voiture", note: "en voiture ; rentrées à la maison vers 20 h 25 en général" },
-      { name: "Sport avec sa coach", days: [5], start: "16:30", end: "17:00", place: "à la maison" }
+      { name: "Sport avec sa coach", days: [5], start: "16:30", end: "17:30", place: "à la maison" },
+      { name: "Sport (body girly)", days: [1], start: null, end: null, uncertain: true, note: "le soir ; horaire à confirmer" },
+      { name: "Pilates (mardi)", days: [2], start: "17:00", end: "18:00", uncertain: true, note: "plutôt tôt (vers 17 h à 18 h) ; horaire à confirmer" }
     ]
   },
   // Lukas : école 8 h 25, fin 16 h (mercredi 12 h). Piscine le vendredi, conduite par Yves qui travaille depuis la cafétéria.

@@ -17,6 +17,7 @@ Ne jamais mettre ces adresses dans le code. Ce dépôt doit rester **privé** (`
 - `data/custody.js` : planning de garde
 - `data/school-events.js` : événements scolaires (réunions de parents, examens ULiège...)
 - `data/school-holidays.js` : vacances FWB 2026-2027 (à confirmer sur enseignement.be)
+- `data/schedules.js` : horaires habituels (travail, école, garderie, activités, trajets) de chaque membre de la famille ; alimente la page **Semaine type** (`semaine.html`)
 
 ## Utilisation
 Ouvrir `index.html` dans un navigateur (ou servir le dossier avec `python3 -m http.server`).

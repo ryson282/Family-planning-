@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Semaine type</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+.tl{display:grid;grid-template-columns:44px repeat(var(--n),minmax(118px,1fr));overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.tl .hd{position:sticky;top:0;z-index:1;background:var(--card);border-bottom:1px solid var(--line);padding:6px 4px;font-weight:600;font-size:.85rem;text-align:center}
+.tl .hd i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:var(--pc)}
+.tl .col{position:relative;border-left:1px solid var(--line);height:var(--h)}
+.tl .hours{position:relative;height:var(--h);font-size:.7rem;color:var(--muted)}
+.tl .hours span{position:absolute;right:4px;transform:translateY(-50%)}
+.tl .grid{position:absolute;left:0;right:0;border-top:1px dashed var(--line)}
+.blk{position:absolute;left:3px;right:3px;box-sizing:border-box;overflow:hidden;padding:2px 5px;font-size:.72rem;line-height:1.25;border-radius:6px;border-left:4px solid var(--pc);background:color-mix(in srgb,var(--pc) 22%,var(--card))}
+.blk b{display:block;font-weight:600}
+.blk.est{border-style:dashed;border-left-style:solid;border:1px dashed var(--pc);border-left:4px solid var(--pc)}
+.blk.k-travel{background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--pc) 14%,var(--card)),color-mix(in srgb,var(--pc) 14%,var(--card)) 6px,color-mix(in srgb,var(--pc) 28%,var(--card)) 6px,color-mix(in srgb,var(--pc) 28%,var(--card)) 12px)}
+.blk.k-care{background:color-mix(in srgb,#f59e0b 24%,var(--card))}
+.blk.k-act{background:color-mix(in srgb,#22c55e 24%,var(--card))}
+.bar2{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.alerts li{display:block;padding:6px 0}
+.warn{color:#b45309}
+@media (prefers-color-scheme:dark){.warn{color:#fbbf24}}
+</style>
+</head>
+<body>
+<header><h1>Semaine type</h1></header>
+<main>
+  <section class="card">
+    <div class="bar2">
+      <label>Vue <select id="mode"><option value="day">Par jour (une colonne par personne)</option><option value="person">Par personne (une colonne par jour)</option></select></label>
+      <label id="pickDay">Jour <select id="day"></select></label>
+      <label id="pickPerson" hidden>Personne <select id="person"></select></label>
+    </div>
+    <div class="tl" id="tl"></div>
+    <p class="muted">Temps scolaire (la piscine de Lukas et l'école s'arrêtent pendant les congés). Bordure pointillée : horaire estimé ou à confirmer. Hachuré : trajet. Orange : garderie. Vert : activité.</p>
+  </section>
+  <section class="card">
+    <h2 style="margin-top:0;font-size:1.1rem">Points de vigilance</h2>
+    <ul class="list alerts" id="alerts"></ul>
+  </section>
+</main>
+<script src="data/people.js"></script>
+<script src="data/schedules.js"></script>
+<script src="assets/common.js"></script>
+<script>
+nav("s");
+const S = window.SCHEDULES, PEOPLE = window.PEOPLE;
+const ORDER = ["moi", "emilie", "lukas", "adrian", "alixia", "louanne"];
+const DAYS = [[1, "Lundi"], [2, "Mardi"], [3, "Mercredi"], [4, "Jeudi"], [5, "Vendredi"]];
+const M = h => { const [a, b] = h.split(":").map(Number); return a * 60 + b; };
+const T = m => `${Math.floor(m / 60)} h${m % 60 ? " " + String(m % 60).padStart(2, "0") : ""}`;
+const nameOf = p => (PEOPLE.find(x => x.id === p) || {}).name || p;
+const shortName = p => nameOf(p).replace(/ \(.*\)/, "").replace("moi", "Yves");
+const ev = (a, b, label, o = {}) => ({ a: M(a), b: M(b), label, ...o });
+const endOf = (sch, d) => (sch.endOverrides && sch.endOverrides[d]) || sch.end;
+
+// Événements d'une personne pour un jour (1 = lundi ... 5 = vendredi), déduits de data/schedules.js.
+function eventsFor(p, d) {
+  const s = S[p] || {}, out = [];
+  if (p === "moi") {
+    const w = s.work, o = w.office;
+    if (o && o.days.includes(d)) {
+      out.push(ev(o.train, o.backAtWaremme, `Bruxelles (train ${T(M(o.train))}, retour ${T(M(o.backAtWaremme))})`, { kind: "travel" }));
+      out.push(ev(o.backAtWaremme, S.alixia.childcare.closes, "Garderie : récupérer Alixia (et Adrian)", { kind: "care", est: true }));
+    } else {
+      let end = w.end;
+      const pool = S.lukas.activities.find(a => a.days.includes(d) && a.blocked);
+      if (pool) end = pool.blocked[0];
+      const mon = d === 1 && S.routines && S.routines[0].estimated;
+      if (mon) end = mon[0];
+      out.push(ev(w.start, end, "Télétravail (début au plus tard 9 h)", { est: true }));
+      if (pool) {
+        out.push(ev(pool.blocked[0], pool.blocked[1], `Piscine avec Lukas (je travaille depuis la cafétéria)`, { kind: "act" }));
+        out.push(ev(pool.blocked[1], S.alixia.childcare.closes, "Garderie : récupérer Alixia (et Adrian)", { kind: "care", est: true }));
+      }
+      if (mon) out.push(ev(mon[0], mon[1], "Garderie puis Liège : chercher Louanne (18 h)", { kind: "travel", est: true }));
+    }
+  } else if (p === "emilie") {
+    const w = s.work[d];
+    if (w) {
+      if (w.back) out.push(ev(w.start || w.leaves, Array.isArray(w.back) ? w.back[0] : "17:00", `${w.place}${Array.isArray(w.back) ? " (retour " + T(M(w.back[0])) + "-" + T(M(w.back[1])) + ")" : " (retour après 17 h)"}`, { est: !!w.leaves }));
+      else out.push(ev(w.start, w.end, w.place));
+    }
+    (s.activities || []).filter(a => a.days.includes(d) && a.start).forEach(a => out.push(ev(a.start, a.end, a.name + (a.place ? " (" + a.place + ")" : ""), { kind: "act", est: a.uncertain })));
+  } else if (p === "lukas") {
+    const sc = s.school; out.push(ev(sc.start, endOf(sc, d), "École"));
+    (s.activities || []).filter(a => a.days.includes(d)).forEach(a => out.push(ev(a.start, a.end, a.name, { kind: "act" })));
+  } else if (p === "adrian") {
+    const sc = s.school, e = endOf(sc, d);
+    out.push(ev(sc.start, e, d === 3 ? "École" : "École + étude jusqu'à 17 h"));
+    if (d === 1) out.push(ev(e, "17:20", "Rentre, puis part avec Yves", { kind: "travel", est: true }));
+    else if (d !== 3 && d !== 2) out.push(ev(e, S.alixia.childcare.closes, "Garderie d'Alixia ou retour direct (selon la semaine)", { kind: "care", est: true }));
+    else if (d === 2) out.push(ev(e, S.alixia.childcare.closes, "Garderie d'Alixia (Yves en train)", { kind: "care", est: true }));
+  } else if (p === "alixia") {
+    const sc = s.school, e = endOf(sc, d);
+    out.push(ev(sc.start, e, "École"));
+    if (s.childcare.days.includes(d)) out.push(ev(e, s.childcare.closes, "Garderie (ferme à 18 h 30)", { kind: "care" }));
+  } else if (p === "louanne") {
+    const c = s.commute, m = c.morning, mon = c.pickup && c.pickup.days.includes(d);
+    out.push(ev(m.train, m.inClassAt, `Train ${T(M(m.train))} + bus`, { kind: "travel" }));
+    out.push(ev(m.inClassAt, mon ? c.pickup.classesEnd : "16:00", mon ? "Cours (fin 18 h)" : "Cours (fin variable)", { est: !mon }));
+    s.activities.filter(a => a.days.includes(d)).forEach(a => out.push(ev(a.start, a.end, a.name + (a.walking ? " (à pied)" : a.by ? " (" + a.by + ")" : ""), { kind: "act" })));
+  }
+  return out;
+}
+
+const LO = 6 * 60, HI = 21.5 * 60, PX = 0.85, H = (HI - LO) * PX;
+function render() {
+  const mode = document.getElementById("mode").value, d = +document.getElementById("day").value, p = document.getElementById("person").value;
+  const lanes = mode === "day" ? ORDER.map(id => ({ title: shortName(id), color: personColor(id), events: eventsFor(id, d) }))
+    : DAYS.map(([n, name]) => ({ title: name, color: personColor(p), events: eventsFor(p, n) }));
+  const tl = document.getElementById("tl");
+  tl.style.setProperty("--n", lanes.length); tl.style.setProperty("--h", H + "px");
+  let hours = "";
+  for (let h = Math.ceil(LO / 60); h <= HI / 60; h++) hours += `<span style="top:${(h * 60 - LO) * PX}px">${h} h</span>`;
+  const grid = [...Array(Math.floor(HI / 60) - Math.ceil(LO / 60) + 1)].map((_, i) => `<div class="grid" style="top:${(Math.ceil(LO / 60) * 60 + i * 60 - LO) * PX}px"></div>`).join("");
+  tl.innerHTML = `<div class="hd"></div>` + lanes.map(l => `<div class="hd" style="--pc:${l.color}"><i></i>${esc(l.title)}</div>`).join("")
+    + `<div class="hours">${hours}</div>`
+    + lanes.map(l => `<div class="col" style="--pc:${l.color}">${grid}${l.events.map(e => {
+      const top = (Math.max(e.a, LO) - LO) * PX, h = Math.max((Math.min(e.b, HI) - Math.max(e.a, LO)) * PX, 14);
+      return `<div class="blk ${e.kind ? "k-" + e.kind : ""} ${e.est ? "est" : ""}" style="top:${top}px;height:${h}px" title="${esc(e.label)} ${T(e.a)}-${T(e.b)}"><b>${esc(e.label)}</b>${T(e.a)} – ${T(e.b)}</div>`;
+    }).join("")}</div>`).join("");
+}
+
+// Points de vigilance déduits des horaires.
+function alerts() {
+  const out = [], close = M(S.alixia.childcare.closes), o = S.moi.work.office;
+  out.push(`<span class="warn">Mardi :</span> retour à Waremme à ${T(M(o.backAtWaremme))}, garderie fermée à ${T(close)} : marge de ${close - M(o.backAtWaremme)} min (Alixia et Adrian).`);
+  const pool = S.lukas.activities[0];
+  out.push(`<span class="warn">Vendredi :</span> piscine de Lukas ${T(M(pool.blocked[0]))} à ${T(M(pool.blocked[1]))} (temps scolaire), puis garderie avant ${T(close)} : marge de ${close - M(pool.blocked[1])} min.`);
+  const r = S.routines[0];
+  out.push(`<span class="warn">Lundi soir :</span> ${r.steps.join(" → ")}. Créneau estimé de ${T(M(r.estimated[0]))} à ${T(M(r.estimated[1]))} ; solfège de Louanne à ${T(M(S.louanne.activities[0].start))}.`);
+  out.push(`<span class="warn">Voiture :</span> utilisée le lundi soir (Louanne à Liège) et le mercredi à 19 h (pilates d'Émilie et Louanne).`);
+  const todo = [];
+  [S.emilie, S.louanne].forEach((x, i) => (x.activities || []).filter(a => a.uncertain).forEach(a => todo.push(`${a.name} (${i ? "Louanne" : "Émilie"}) : ${a.note || "à confirmer"}`)));
+  if (todo.length) out.push(`<span class="warn">À préciser :</span> ${todo.map(esc).join(" ; ")}.`);
+  document.getElementById("alerts").innerHTML = out.map(x => `<li>${x}</li>`).join("");
+}
+
+document.getElementById("day").innerHTML = DAYS.map(([n, name]) => `<option value="${n}">${name}</option>`).join("");
+document.getElementById("person").innerHTML = ORDER.map(id => `<option value="${id}">${esc(shortName(id))}</option>`).join("");
+const wd = new Date().getDay(); document.getElementById("day").value = String(wd >= 1 && wd <= 5 ? wd : 1);
+document.getElementById("mode").onchange = e => { document.getElementById("pickDay").hidden = e.target.value !== "day"; document.getElementById("pickPerson").hidden = e.target.value !== "person"; render(); };
+document.getElementById("day").onchange = document.getElementById("person").onchange = render;
+render(); alerts();
+</script>
+</body>
+</html>

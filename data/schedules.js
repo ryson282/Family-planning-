@@ -66,6 +66,7 @@ window.SCHEDULES = {
   routines: [
     {
       day: 1, name: "Lundi soir : aller chercher Louanne",
+      estimated: ["17:20", "18:40"], // créneau estimé (trajet Waremme-Liège d'environ 30 min), à confirmer
       steps: [
         "Adrian rentre à la maison à la fin de l'étude (17 h)",
         "Yves et Adrian partent chercher Alixia à la garderie (ferme à 18 h 30)",

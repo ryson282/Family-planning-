@@ -11,6 +11,7 @@ window.SCHEDULES = {
   },
   // Matin : les enfants vont à l'école avec Yves ou seuls à pied. Retour à la maison : seuls (Lukas seul à la maison sans souci).
   // Émilie : travail à Saint-Georges-sur-Meuse dès 8 h ; rentre souvent entre 16 h 30 et 17 h le mardi et le jeudi (autres jours à préciser).
+  // Elle ne s'occupe PAS des enfants d'Yves (Adrian, Alixia) : Yves les gère lui-même, ne jamais la compter comme solution de garde.
   emilie: {
     work: { start: "08:00", place: "Saint-Georges-sur-Meuse" },
     homeByDay: { 2: ["16:30", "17:00"], 4: ["16:30", "17:00"] }
@@ -25,15 +26,15 @@ window.SCHEDULES = {
     ]
   },
   // Adrian : école 8 h 25, étude à l'école jusqu'à 17 h (mercredi : fin d'office à 12 h).
-  // Règle : si Yves n'est pas à la maison à la fin de l'étude, Adrian va à la garderie d'Alixia (jamais le mercredi) ;
-  // sinon, à décider selon la semaine (garderie ou retour direct).
+  // Pas d'étude le mercredi (fin d'office à 12 h). Les autres jours : si Yves n'est pas à la maison à la fin de l'étude,
+  // Adrian va à la garderie d'Alixia ; sinon, à décider selon la semaine (garderie ou retour direct).
   adrian: {
     school: { start: "08:25", end: "17:00", days: [1, 2, 3, 4, 5], endOverrides: { 3: "12:00" }, afterSchool: "étude jusqu'à 17 h" },
-    options: { afterStudy: ["garderie d'Alixia (jamais le mercredi)", "rentrer directement à la maison"], defaultIfYvesAway: "garderie d'Alixia" }
+    options: { afterStudy: ["garderie d'Alixia (hors mercredi)", "rentrer directement à la maison"], defaultIfYvesAway: "garderie d'Alixia" }
   },
-  // Alixia : école 8 h 30, fin 15 h 30 (mercredi 12 h), puis garderie jusqu'à 18 h 30 maximum (pas de garderie le mercredi).
+  // Alixia : école 8 h 30, fin 15 h 30 (mercredi 12 h), puis garderie jusqu'à 18 h 30 maximum, tous les jours y compris le mercredi.
   alixia: {
     school: { start: "08:30", end: "15:30", days: [1, 2, 3, 4, 5], endOverrides: { 3: "12:00" } },
-    childcare: { name: "garderie de l'école primaire", closes: "18:30", days: [1, 2, 4, 5] }
+    childcare: { name: "garderie de l'école primaire", closes: "18:30", days: [1, 2, 3, 4, 5] }
   }
 };

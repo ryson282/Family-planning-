@@ -1,5 +1,5 @@
 // Horaires habituels en temps scolaire (hors congés). Jours : 1 = lundi ... 5 = vendredi. Heures "HH:MM".
-// À compléter : Louanne (cours, trajet, autres activités) et Émilie (seuls le mardi et le jeudi sont renseignés).
+// À compléter : Louanne (jours de cours, autres activités) et Émilie (autres activités éventuelles).
 window.SCHEDULES = {
   // Yves : télétravail tous les jours sauf le mardi (train pour Bruxelles).
   moi: {
@@ -10,12 +10,20 @@ window.SCHEDULES = {
     }
   },
   // Matin : les enfants vont à l'école avec Yves ou seuls à pied. Retour à la maison : seuls (Lukas seul à la maison sans souci).
-  // Émilie : travail à Saint-Georges-sur-Meuse dès 8 h ; rentre souvent entre 16 h 30 et 17 h le mardi et le jeudi (autres jours à préciser).
+  // Émilie : lundi à Pepinster ; mardi et jeudi à Saint-Georges-sur-Meuse ; mercredi et vendredi en télétravail le matin.
   // Elle ne s'occupe PAS des enfants d'Yves (Adrian, Alixia) : Yves les gère lui-même, ne jamais la compter comme solution de garde.
   emilie: {
-    work: { start: "08:00", place: "Saint-Georges-sur-Meuse" },
-    homeByDay: { 2: ["16:30", "17:00"], 4: ["16:30", "17:00"] },
-    activities: [{ name: "Pilates (avec Louanne)", days: [3], start: "19:00", end: "20:25", by: "voiture", note: "en voiture ; rentrées à la maison vers 20 h 25 en général" }]
+    work: {
+      1: { place: "Pepinster", leaves: "08:30", back: "après 17:00" },
+      2: { place: "Saint-Georges-sur-Meuse", start: "08:00", back: ["16:30", "17:00"] },
+      3: { place: "maison (télétravail)", start: "08:30", end: "12:00" },
+      4: { place: "Saint-Georges-sur-Meuse", start: "08:00", back: ["16:30", "17:00"] },
+      5: { place: "maison (télétravail)", start: "08:00", end: "12:00" }
+    },
+    activities: [
+      { name: "Pilates (avec Louanne)", days: [3], start: "19:00", end: "20:25", by: "voiture", note: "en voiture ; rentrées à la maison vers 20 h 25 en général" },
+      { name: "Sport avec sa coach", days: [5], start: "16:30", end: "17:00", place: "à la maison" }
+    ]
   },
   // Lukas : école 8 h 25, fin 16 h (mercredi 12 h). Piscine le vendredi, conduite par Yves qui travaille depuis la cafétéria.
   // La piscine s'arrête pendant tous les congés scolaires.

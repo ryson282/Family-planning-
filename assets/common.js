@@ -87,18 +87,31 @@ function houseEmptyOn(day) {
   return (window.HOUSE_EMPTY || []).find(a => inRange(day, a.start, a.end));
 }
 
-// Jours ouvrables de congé scolaire où A² est chez moi (ou en échange), avec leur solution de garde éventuelle.
+// Jours fériés et congés isolés (Armistice, lundi de Pâques, « Congé : Mardi gras » des événements scolaires...).
+function daysOff() {
+  const seen = new Set(), out = [];
+  const push = (date, name) => { if (!seen.has(date)) { seen.add(date); out.push({ date, name }); } };
+  (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "ferie").forEach(h => {
+    for (let k = h.start; k <= h.end; k = addDays(k, 1)) push(k, h.name);
+  });
+  (window.SCHOOL_EVENTS || []).filter(e => /^Congé : /.test(e.title)).forEach(e => push(e.date, e.title.replace(/^Congé : /, "")));
+  return out;
+}
+
+// Jours ouvrables de congé scolaire ou férié où A² est chez moi (ou en échange), avec leur solution de garde éventuelle.
 function childcareDays() {
   const out = [];
+  const add = (k, label) => {
+    const d = parse(k), c = custodyOn(k);
+    if (d.getDay() === 0 || d.getDay() === 6 || (c !== "moi" && c !== "echange")) return;
+    const plan = (window.CHILDCARE_PLANS || []).find(p => inRange(k, p.start, p.end));
+    out.push({ date: k, holiday: label, exchange: c === "echange", solution: plan ? plan.solution : "" });
+  };
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances").forEach(h => {
-    for (let d = parse(h.start); iso(d) <= h.end; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
-      const k = iso(d), c = custodyOn(k);
-      if (d.getDay() === 0 || d.getDay() === 6 || (c !== "moi" && c !== "echange")) continue;
-      const plan = (window.CHILDCARE_PLANS || []).find(p => inRange(k, p.start, p.end));
-      out.push({ date: k, holiday: h.name, exchange: c === "echange", solution: plan ? plan.solution : "" });
-    }
+    for (let k = h.start; k <= h.end; k = addDays(k, 1)) add(k, h.name);
   });
-  return out;
+  daysOff().forEach(o => { if (!holidayOn(o.date) || holidayOn(o.date).type === "ferie") add(o.date, o.name); });
+  return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // Regroupe les jours sans solution en périodes consécutives (week-ends ignorés), par congé.
@@ -110,6 +123,54 @@ function childcareGaps() {
     if (gapDays <= 3) g.end = d.date; else gaps.push({ holiday: d.holiday, start: d.date, end: d.date });
   });
   return gaps;
+}
+
+// Louanne (ULiège) : libre pendant ses vacances/congés (événements scolaires « ULiège : vacances… » ou « ULiège : congé… »).
+// Ne renseigne que la période couverte par ces événements ; en dehors, la disponibilité est inconnue.
+function louanneNote(start, end) {
+  const ev = (window.SCHOOL_EVENTS || []).filter(e => e.person === "louanne" && e.title.startsWith("ULiège"));
+  if (!ev.length) return "";
+  const from = ev.reduce((m, e) => (e.date < m ? e.date : m), "9999"), to = ev.reduce((m, e) => ((e.end || e.date) > m ? (e.end || e.date) : m), "");
+  const breaks = ev.filter(e => /^ULiège : (vacances|congé)/.test(e.title));
+  let known = 0, busy = 0;
+  for (let k = start; k <= end; k = addDays(k, 1)) {
+    const dw = parse(k).getDay();
+    if (dw === 0 || dw === 6 || k < from || k > to) continue;
+    known++;
+    if (!breaks.some(e => inRange(k, e.date, e.end || e.date))) busy++;
+  }
+  if (!known) return "";
+  return busy === 0 ? "Louanne libre" : busy === known ? "Louanne en cours ou examens" : `Louanne libre sauf ${busy} jour${busy > 1 ? "s" : ""} de cours ou d'examens`;
+}
+
+// Périodes de congé scolaire où A² n'est PAS chez moi (week-ends adjacents inclus, au moins 4 jours) : départ en vacances possible.
+function awayPeriods() {
+  const out = [];
+  (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances").forEach(h => {
+    let run = null;
+    const close = () => { if (run && run.days >= 4) out.push({ ...run, louanne: louanneNote(run.start, run.end) }); run = null; };
+    for (let k = addDays(h.start, -2); k <= addDays(h.end, 2); k = addDays(k, 1)) {
+      if (custodyOn(k) === "autre") { if (run) { run.end = k; run.days++; } else run = { holiday: h.name, start: k, end: k, days: 1 }; }
+      else close();
+    }
+    close();
+  });
+  return out;
+}
+
+// Fenêtres pour sortir avec Émilie dans les `horizon` prochains jours : semaines où A² est chez l'autre parent
+// (soirées et week-end libres) et périodes de stage/garde organisée (journées libres).
+function outingWindows(today, horizon) {
+  const limit = addDays(today, horizon), out = [];
+  let run = null;
+  const close = () => { if (run) out.push(run); run = null; };
+  for (let k = today; k <= limit; k = addDays(k, 1)) {
+    if (custodyOn(k) === "autre") { if (run) run.end = k; else run = { kind: "absents", start: k, end: k }; } else close();
+  }
+  close();
+  (window.CHILDCARE_PLANS || []).filter(p => p.end >= today && p.start <= limit)
+    .forEach(p => out.push({ kind: "occupes", start: p.start < today ? today : p.start, end: p.end, note: p.solution }));
+  return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
 function isCustodyEvent(e) {
@@ -127,6 +188,13 @@ function allEvents() {
   (window.CALENDAR_EVENTS || []).filter(e => !isCustodyEvent(e) && !isHidden(e)).forEach(e => out.push({ date: e.start.slice(0, 10), end: (e.end || e.start).slice(0, 10), title: e.title, source: e.calendar, person: (window.CALENDAR_OWNERS || {})[e.calendar], time: e.allDay ? "" : e.start.slice(11, 16) }));
   (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.end || e.date, title: e.title, source: "École", person: e.person }));
   return out;
+}
+
+// Tag coloré selon le type d'action (catégorie) : Garde, École, Administratif, Santé, Activités, Vacances, Sorties, Maison, Autre.
+function catTag(cat) {
+  const key = String(cat || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const known = ["garde", "ecole", "administratif", "sante", "activites", "vacances", "sorties", "maison"];
+  return `<span class="tag cat-${known.includes(key) ? key : "autre"}">${esc(cat)}</span>`;
 }
 
 function personColor(id) {

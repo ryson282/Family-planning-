@@ -31,3 +31,12 @@ ul.list li:last-child{border:0}
 form.add{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:6px}
 .muted{color:var(--muted);font-size:.85rem}
 @media(max-width:640px){form.add{grid-template-columns:1fr 1fr}form.add input:first-child{grid-column:1/-1}.day{min-height:60px}.ev{font-size:.65rem}}
+/* Tags colorés par type d'action (catégorie) */
+.tag[class*="cat-"]{background:var(--c-bg);color:var(--c-fg);font-weight:600}
+.cat-garde{--c-bg:#dbeafe;--c-fg:#1e40af}.cat-ecole{--c-bg:#ede9fe;--c-fg:#5b21b6}.cat-administratif{--c-bg:#e2e8f0;--c-fg:#334155}
+.cat-sante{--c-bg:#fee2e2;--c-fg:#991b1b}.cat-activites{--c-bg:#dcfce7;--c-fg:#166534}.cat-vacances{--c-bg:#ffedd5;--c-fg:#9a3412}
+.cat-sorties{--c-bg:#fce7f3;--c-fg:#9d174d}.cat-maison{--c-bg:#ccfbf1;--c-fg:#115e59}.cat-autre{--c-bg:#f1f5f9;--c-fg:#475569}
+@media (prefers-color-scheme:dark){
+.cat-garde{--c-bg:#1e3a5f;--c-fg:#bfdbfe}.cat-ecole{--c-bg:#3b2a6b;--c-fg:#ddd6fe}.cat-administratif{--c-bg:#334155;--c-fg:#e2e8f0}
+.cat-sante{--c-bg:#5f2323;--c-fg:#fecaca}.cat-activites{--c-bg:#1d4d2e;--c-fg:#bbf7d0}.cat-vacances{--c-bg:#5c3417;--c-fg:#fed7aa}
+.cat-sorties{--c-bg:#5c1f3e;--c-fg:#fbcfe8}.cat-maison{--c-bg:#134e4a;--c-fg:#99f6e4}.cat-autre{--c-bg:#2a3140;--c-fg:#cbd5e1}}

@@ -76,7 +76,7 @@ function upcoming() {
     ...(window.SCHOOL_HOLIDAYS || []).filter(h => h.end >= today && h.start <= limit).map(h => ({ date: h.start, text: h.name, tag: "École" }))
   ].sort((a, b) => a.date.localeCompare(b.date));
   document.getElementById("upcoming").innerHTML = rows.length
-    ? rows.map(r => `<li><span class="muted" style="min-width:90px">${fmt(parse(r.date))}</span><span class="t">${esc(r.text)}</span><span class="tag">${esc(r.tag)}</span></li>`).join("")
+    ? rows.map(r => `<li><span class="muted" style="min-width:90px">${fmt(parse(r.date))}</span><span class="t">${esc(r.text)}</span>${catTag(r.tag)}</li>`).join("")
     : `<li class="muted">Rien de prévu.</li>`;
 }
 

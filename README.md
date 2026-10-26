@@ -44,7 +44,7 @@ Sans configuration, les tâches restent dans le navigateur de chaque appareil. P
    create policy "famille" on family_tasks for all to anon using (true) with check (true);
    ```
 2. **Project Settings → API** : copier l'**adresse du projet** (`https://xxxx.supabase.co`) et la clé **anon public**.
-3. Page Tâches → « Synchronisation entre appareils » : coller les deux valeurs et **Enregistrer**, sur chaque appareil. Elles restent dans ce navigateur, jamais dans le code ni dans le dépôt.
+3. Renseigner les deux valeurs dans `data/sync-config.js` (déjà fait pour le projet de la famille) : elles sont alors partagées par tous les appareils qui ont le dépôt. À défaut, la page Tâches → « Synchronisation entre appareils » permet de les saisir dans le navigateur (propre à l'appareil).
 
 La synchronisation se fait au chargement, toutes les minutes et au retour sur la page ; la modification la plus récente gagne. Hors ligne, les tâches restent utilisables et sont renvoyées ensuite.
-Attention : toute personne qui possède l'adresse et la clé peut lire et modifier les tâches ; ne pas les partager. Il faut aussi que la page soit accessible sur chaque appareil (copie du dépôt ou hébergement).
+Attention : toute personne qui possède l'adresse et la clé peut lire et modifier les tâches ; le dépôt doit rester **privé**. Utiliser uniquement la clé publique (`anon` / `publishable`), jamais la clé `service_role` ou « secret ». Il faut aussi que la page soit accessible sur chaque appareil (copie du dépôt ou hébergement).

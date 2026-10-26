@@ -35,7 +35,7 @@
   <section class="card">
     <details id="syncBox">
       <summary><b>Synchronisation entre appareils</b> <span class="muted" id="syncState"></span></summary>
-      <p class="muted">Les tâches sont partagées via un projet Supabase (voir le README). L'adresse et la clé restent dans ce navigateur : à saisir une fois par appareil.</p>
+      <p class="muted">Les tâches sont partagées via un projet Supabase, configuré dans data/sync-config.js (voir le README). Les champs ci-dessous ne servent qu'à utiliser un autre projet sur cet appareil.</p>
       <form class="add" id="syncForm">
         <input id="syncUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
         <input id="syncKey" placeholder="Clé « anon public »" type="password" autocomplete="off">
@@ -55,6 +55,7 @@
 <script src="data/recurring-tasks.js"></script>
 <script src="data/calendar.js"></script>
 <script src="assets/common.js"></script>
+<script src="data/sync-config.js"></script>
 <script src="assets/tasks-sync.js"></script>
 <script>
 nav("t");

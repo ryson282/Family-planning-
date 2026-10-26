@@ -30,6 +30,8 @@ window.SCHEDULES = {
   // Adrian va à la garderie d'Alixia ; sinon, à décider selon la semaine (garderie ou retour direct).
   adrian: {
     school: { start: "08:25", end: "17:00", days: [1, 2, 3, 4, 5], endOverrides: { 3: "12:00" }, afterSchool: "étude jusqu'à 17 h" },
+    // Lundi : Adrian rentre à la maison à la fin de l'étude (voir routines).
+    mondayAfterStudy: "rentre à la maison",
     options: { afterStudy: ["garderie d'Alixia (hors mercredi)", "rentrer directement à la maison"], defaultIfYvesAway: "garderie d'Alixia" }
   },
   // Alixia : école 8 h 30, fin 15 h 30 (mercredi 12 h), puis garderie jusqu'à 18 h 30 maximum, tous les jours y compris le mercredi.
@@ -47,5 +49,17 @@ window.SCHEDULES = {
       { name: "Solfège", days: [1], start: "19:10", end: "20:50", walking: true },
       { name: "Piano", days: [4], start: "20:00", end: "20:50", walking: true }
     ] // liste incomplète : d'autres activités à ajouter
-  }
+  },
+  // Enchaînements types de la semaine.
+  routines: [
+    {
+      day: 1, name: "Lundi soir : aller chercher Louanne",
+      steps: [
+        "Adrian rentre à la maison à la fin de l'étude (17 h)",
+        "Yves et Adrian partent chercher Alixia à la garderie (ferme à 18 h 30)",
+        "Tous trois vont chercher Louanne à Liège à la fin de ses cours (18 h)",
+        "Retour à la maison pour que Louanne mange avant son solfège (19 h 10)"
+      ]
+    }
+  ]
 };

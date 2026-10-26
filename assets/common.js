@@ -204,5 +204,5 @@ function personColor(id) {
 
 function nav(active) {
   document.querySelector("header").insertAdjacentHTML("beforeend",
-    `<nav><a href="index.html" class="${active === "p" ? "on" : ""}">Planning</a><a href="taches.html" class="${active === "t" ? "on" : ""}">Tâches</a></nav>`);
+    `<nav><a href="index.html" class="${active === "p" ? "on" : ""}">Planning</a><a href="semaine.html" class="${active === "s" ? "on" : ""}">Semaine type</a><a href="taches.html" class="${active === "t" ? "on" : ""}">Tâches</a></nav>`);
 }

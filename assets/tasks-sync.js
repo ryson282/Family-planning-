@@ -5,7 +5,11 @@ const readJson = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 
 const writeJson = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 
 const taskSync = {
-  config() { const c = readJson(SYNC_CFG, null); return c && c.url && c.key ? c : null; },
+  // Configuration saisie dans la page (propre au navigateur) ou, à défaut, data/sync-config.js (partagée par tous les appareils).
+  config() {
+    const c = readJson(SYNC_CFG, null), d = window.SYNC_CONFIG;
+    return c && c.url && c.key ? c : d && d.url && d.key ? d : null;
+  },
   setConfig(url, key) { writeJson(SYNC_CFG, { url: url.trim().replace(/\/+$/, ""), key: key.trim() }); },
   clearConfig() { try { localStorage.removeItem(SYNC_CFG); localStorage.removeItem(SYNC_DONE); } catch (e) {} },
   async call(path, opts = {}) {

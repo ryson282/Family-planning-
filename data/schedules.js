@@ -39,10 +39,13 @@ window.SCHEDULES = {
   },
   // Louanne : habite chez Yves et Émilie, fait le trajet vers Liège tous les jours. Horaire de cours et trajet à préciser.
   louanne: {
-    home: true, commute: "tous les jours (heures à préciser)",
+    home: true,
+    // Trajet vers l'université : train / bus, sauf le lundi soir où Yves va la chercher en voiture (fin des cours à 18 h).
+    commute: { mode: "train / bus", days: "tous les jours (heures à préciser)", pickup: { days: [1], by: "moi", car: true, classesEnd: "18:00" } },
+    // Solfège et piano : à distance de marche de la maison, personne ne l'y emmène.
     activities: [
-      { name: "Solfège", days: [1], start: "19:10", end: "20:50" },
-      { name: "Piano", days: [4], start: "20:00", end: "20:50" }
+      { name: "Solfège", days: [1], start: "19:10", end: "20:50", walking: true },
+      { name: "Piano", days: [4], start: "20:00", end: "20:50", walking: true }
     ] // liste incomplète : d'autres activités à ajouter
   }
 };

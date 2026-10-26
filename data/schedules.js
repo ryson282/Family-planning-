@@ -1,5 +1,5 @@
 // Horaires habituels en temps scolaire (hors congés). Jours : 1 = lundi ... 5 = vendredi. Heures "HH:MM".
-// À compléter : Louanne et Émilie (horaires plus compliqués ; pour Émilie, seuls le mardi et le jeudi sont renseignés).
+// À compléter : Louanne (cours, trajet, autres activités) et Émilie (seuls le mardi et le jeudi sont renseignés).
 window.SCHEDULES = {
   // Yves : télétravail tous les jours sauf le mardi (train pour Bruxelles).
   moi: {
@@ -36,5 +36,13 @@ window.SCHEDULES = {
   alixia: {
     school: { start: "08:30", end: "15:30", days: [1, 2, 3, 4, 5], endOverrides: { 3: "12:00" } },
     childcare: { name: "garderie de l'école primaire", closes: "18:30", days: [1, 2, 3, 4, 5] }
+  },
+  // Louanne : habite chez Yves et Émilie, fait le trajet vers Liège tous les jours. Horaire de cours et trajet à préciser.
+  louanne: {
+    home: true, commute: "tous les jours (heures à préciser)",
+    activities: [
+      { name: "Solfège", days: [1], start: "19:10", end: "20:50" },
+      { name: "Piano", days: [4], start: "20:00", end: "20:50" }
+    ] // liste incomplète : d'autres activités à ajouter
   }
 };

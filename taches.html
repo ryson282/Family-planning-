@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#4f6bed">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <title>Tâches familiales</title>
 <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -83,19 +86,19 @@ function suggestions() {
   childcareGaps().filter(g => g.end >= today).forEach(g => {
     const due = iso(new Date(parse(g.start) - (g.holiday.includes("été") ? 56 : 28) * MS));
     const label = g.start === g.end ? fmt(parse(g.start)) : `du ${fmt(parse(g.start))} au ${fmt(parse(g.end))}`;
-    out.push({ title: `Planification de garde A² (Adrian et Alixia) ${label} (${g.holiday.replace(/ \(.*\)/, "")})`, cat: "Garde", who: "moi", due: due < today ? today : due });
+    out.push({ title: `Planification de garde A² (Adrian et Alixia) ${label} (${g.holiday.replace(/ \(.*\)/, "")})`, cat: "Garde", who: "moi", due: due < today ? today : due, until: g.end });
   });
   // A² chez l'autre parent pendant un congé : partir en vacances avec Louanne, Lukas et Émilie, et prévoir Lana.
   awayPeriods().filter(a => a.end >= today).forEach(a => {
     const summer = a.holiday.includes("été"), label = `du ${fmt(parse(a.start))} au ${fmt(parse(a.end))} (${a.holiday.replace(/ \(.*\)/, "")})`;
     const planDue = iso(new Date(parse(a.start) - (summer ? 16 : 8) * 7 * MS)), lanaDue = iso(new Date(parse(a.start) - (summer ? 8 : 4) * 7 * MS));
-    out.push({ title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie${a.louanne ? " — " + a.louanne : ""}`, cat: "Vacances", who: "famille", due: planDue < today ? today : planDue });
+    out.push({ title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie${a.louanne ? " — " + a.louanne : ""}`, cat: "Vacances", who: "famille", due: planDue < today ? today : planDue, until: a.end });
     if (!(window.HOUSE_EMPTY || []).some(h => h.start <= a.end && h.end >= a.start))
-      out.push({ title: `Garde de Lana si départ en vacances ${label}`, cat: "Garde", who: "lana", due: lanaDue < today ? today : lanaDue });
+      out.push({ title: `Garde de Lana si départ en vacances ${label}`, cat: "Garde", who: "lana", due: lanaDue < today ? today : lanaDue, until: a.end });
   });
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today).forEach(a => {
     const due = iso(new Date(parse(a.start) - 14 * MS));
-    out.push({ title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: due < today ? today : due });
+    out.push({ title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: due < today ? today : due, until: a.end });
   });
   // Tâches annuelles : prochaine occurrence du mois (le 1er, ou aujourd'hui si on y est déjà), visible 60 jours avant.
   const now = new Date(), MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -114,8 +117,8 @@ function outings() {
   return outingWindows(today, 120).slice(0, 10).map(w => {
     const weekend = [0, 6].some(dw => { for (let k = w.start; k <= w.end; k = addDays(k, 1)) if (parse(k).getDay() === dw) return true; });
     return w.kind === "absents"
-      ? { text: `A² chez l'autre parent ${range(w.start, w.end)} : soirées libres${weekend ? ", week-end compris" : ""}`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² absents)`, due: w.start }
-      : { text: `A² occupés (${w.note || "garde organisée"}) ${range(w.start, w.end)} : journées libres`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² en ${w.note || "garde organisée"})`, due: w.start };
+      ? { text: `A² chez l'autre parent ${range(w.start, w.end)} : soirées libres${weekend ? ", week-end compris" : ""}`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² absents)`, due: w.start, until: w.end }
+      : { text: `A² occupés (${w.note || "garde organisée"}) ${range(w.start, w.end)} : journées libres`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² en ${w.note || "garde organisée"})`, due: w.start, until: w.end };
   }).filter(o => !tasks.some(t => t.title === o.title));
 }
 
@@ -132,22 +135,45 @@ async function runSync() {
   catch (e) { setState("⚠ synchronisation impossible (" + e.message + ")", true); }
 }
 
+// Tâches de planning (garde, vacances, Lana, sorties) liées à une période : supprimées une fois la période passée.
+// Les tâches annuelles (entretiens) n'ont pas de période et restent. Les anciennes tâches sans « until » sont datées
+// d'après leur titre (dernière date « 24 oct. ») en prenant la première occurrence à partir de l'échéance.
+const PLANNING_RE = /^(Planification de (garde|vacances)|Garde de A² chez Yves|Garde de Lana si départ|Trouver qui garde Lana|Sortie avec Émilie)/;
+const MON_ABBR = { "janv.": 0, "févr.": 1, "mars": 2, "avr.": 3, "mai": 4, "juin": 5, "juil.": 6, "août": 7, "sept.": 8, "oct.": 9, "nov.": 10, "déc.": 11 };
+function periodEnd(t) {
+  if (t.until) return t.until;
+  if (!PLANNING_RE.test(t.title || "")) return null;
+  const m = [...t.title.matchAll(/(\d{1,2}) (janv\.|févr\.|mars|avr\.|mai|juin|juil\.|août|sept\.|oct\.|nov\.|déc\.)(?![\p{L}])/gu)].pop();
+  if (!m) return null;
+  const base = t.due || iso(new Date());
+  let y = +base.slice(0, 4), end = iso(new Date(y, MON_ABBR[m[2]], +m[1]));
+  if (end < base) end = iso(new Date(y + 1, MON_ABBR[m[2]], +m[1]));
+  return end;
+}
+function purgePast() {
+  const today = iso(new Date()), gone = tasks.filter(t => { const e = periodEnd(t); return e && e < today; });
+  if (!gone.length) return;
+  tasks = tasks.filter(t => !gone.includes(t)); save();
+  gone.forEach(t => remoteRemove(t.id));
+}
+
 function render() {
+  purgePast();
   const f = document.getElementById("filter").value, sd = document.getElementById("showDone").checked, today = iso(new Date());
   const rows = tasks.filter(t => (!f || t.who === f) && (sd || !t.done))
     .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
   document.getElementById("list").innerHTML = rows.length ? rows.map(t => `
-    <li class="${t.done ? "done" : ""}"><input type="checkbox" data-id="${t.id}" ${t.done ? "checked" : ""}>
-    <span class="t">${esc(t.title)}</span><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
-    <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? fmt(parse(t.due)) : ""}</span>
-    <button data-del="${t.id}" title="Supprimer">✕</button></li>`).join("") : `<li class="muted">Aucune tâche.</li>`;
+    <li class="item task ${t.done ? "done" : ""}"><input type="checkbox" data-id="${t.id}" ${t.done ? "checked" : ""} aria-label="Terminée">
+    <span class="t">${esc(t.title)}</span><span class="meta"><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
+    <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? fmt(parse(t.due)) : ""}</span></span>
+    <button data-del="${t.id}" title="Supprimer" aria-label="Supprimer">✕</button></li>`).join("") : `<li class="muted">Aucune tâche.</li>`;
   const s = suggestions();
   document.getElementById("sugg").hidden = !s.length;
-  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li><span class="t">${esc(x.title)}</span>${catTag(x.cat)}<span class="muted">avant le ${fmt(parse(x.due))}</span><button data-s="${i}">Ajouter</button></li>`).join("");
+  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${fmt(parse(x.due))}</span></span><button data-s="${i}">Ajouter</button></li>`).join("");
   window._s = s;
   const o = outings();
   document.getElementById("out").hidden = !o.length;
-  document.getElementById("outList").innerHTML = o.map((x, i) => `<li><span class="t">${esc(x.text)}</span>${catTag("Sorties")}<button data-o="${i}">Ajouter</button></li>`).join("");
+  document.getElementById("outList").innerHTML = o.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.text)}</span><span class="meta">${catTag("Sorties")}</span><button data-o="${i}">Ajouter</button></li>`).join("");
   window._o = o;
 }
 
@@ -160,7 +186,7 @@ document.addEventListener("click", e => {
   const d = e.target.dataset;
   if (d.del) { tasks = tasks.filter(t => String(t.id) !== d.del); save(); render(); remoteRemove(d.del); }
   if (d.s) add(window._s[d.s]);
-  if (d.o) { const o = window._o[d.o]; add({ title: o.title, who: "moi", cat: "Sorties", due: o.due }); }
+  if (d.o) { const o = window._o[d.o]; add({ title: o.title, who: "moi", cat: "Sorties", due: o.due, until: o.until }); }
 });
 document.addEventListener("change", e => {
   if (e.target.dataset.id) { const t = tasks.find(t => String(t.id) === e.target.dataset.id); t.done = e.target.checked; t.updated = Date.now(); save(); render(); remotePush(t); }

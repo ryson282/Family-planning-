@@ -48,7 +48,7 @@ jobs:
         if: steps.cfg.outputs.ready == 'true'
         run: |
           mkdir dist
-          cp index.html taches.html semaine.html dist/
+          cp index.html taches.html semaine.html manifest.webmanifest dist/
           cp -r assets data dist/
       - name: Créer le projet Pages (ignoré s'il existe)
         if: steps.cfg.outputs.ready == 'true'

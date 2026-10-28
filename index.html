@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#4f6bed">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <title>Planning familial</title>
 <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -11,15 +14,22 @@
 <main>
   <section class="card">
     <div class="bar">
-      <button id="prev">←</button><h2 id="title"></h2><select id="who" title="Voir les événements de"><option value="">Tout le monde</option></select><button id="today">Aujourd'hui</button><button id="next">→</button>
+      <div class="nav3"><button id="prev" aria-label="Mois précédent">←</button><button id="today">Aujourd'hui</button><button id="next" aria-label="Mois suivant">→</button></div>
+      <h2 id="title"></h2>
+      <select id="who" title="Voir les événements de" aria-label="Personne"><option value="">Tout le monde</option></select>
     </div>
+    <p class="muted sync" id="upd"></p>
     <div class="grid" id="grid"></div>
-    <div class="legend" style="margin-top:10px">
-      <span><i style="background:var(--vac)"></i>Vacances scolaires</span>
-      <span><i style="background:var(--ferie)"></i>Jour férié</span>
-      <span><i style="background:#4f9dff"></i>Enfants chez moi</span><span><i style="background:#b8bfcc"></i>Chez l'autre parent</span><span><i style="background:linear-gradient(90deg,#4f9dff,#b8bfcc)"></i>Échange</span><span>Barre pâle = garde estimée par règle</span><span>🐱 Maison vide</span><span>🧒 Garde de A² en congé</span>
-      <span id="upd"></span>
-    </div>
+    <div class="detail" id="detail" aria-live="polite"><h3 id="dTitle"></h3><ul class="list" id="dList"></ul></div>
+    <details class="legend-box">
+      <summary>Légende</summary>
+      <div class="legend">
+        <span><i style="background:var(--vac)"></i>Vacances scolaires (FWB)</span>
+        <span><i style="background:var(--ferie)"></i>Jour férié</span>
+        <span><i style="background:#4f9dff"></i>Enfants chez moi</span><span><i style="background:#b8bfcc"></i>Chez l'autre parent</span><span><i style="background:linear-gradient(90deg,#4f9dff,#b8bfcc)"></i>Échange</span><span>Barre pâle = garde estimée par règle</span><span>🐱 Maison vide</span><span>🧒 Garde de A² en congé</span>
+        <span id="people"></span>
+      </div>
+    </details>
   </section>
   <section class="card">
     <h2 style="margin-top:0;font-size:1.1rem">À venir (30 jours)</h2>
@@ -41,10 +51,26 @@ let cur = new Date(); cur.setDate(1);
 const events = allEvents();
 const careByDay = Object.fromEntries(childcareDays().map(d => [d.date, d]));
 const whoSel = document.getElementById("who");
+const todayIso = () => iso(new Date());
+let selDay = todayIso();
 whoSel.insertAdjacentHTML("beforeend", PEOPLE.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join(""));
 whoSel.onchange = () => { render(); upcoming(); };
-document.getElementById("upd").insertAdjacentHTML("beforebegin", PEOPLE.map(p => `<span><i style="background:${p.color}"></i>${esc(p.name.replace(/ \(.*\)/, ""))}</span>`).join(""));
+document.getElementById("people").innerHTML = PEOPLE.map(p => `<span><i style="background:${p.color}"></i>${esc(p.name.replace(/ \(.*\)/, ""))}</span>`).join("");
 const visible = e => !whoSel.value || !e.person || e.person.split(",").includes(whoSel.value);
+const personName = id => String(id || "").split(",").map(i => ((PEOPLE.find(p => p.id === i) || {}).name || i).replace(/ \(.*\)/, "")).join(", ");
+const longDay = k => parse(k).toLocaleDateString("fr-BE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+// Détail d'un jour (affiché au toucher / au clic) : tout ce qui n'entre pas dans une case du calendrier.
+function dayDetail(k) {
+  const h = holidayOn(k), c = custodyOn(k), cc = careByDay[k], he = houseEmptyOn(k), rows = [];
+  if (h) rows.push(`<li><span class="t">${esc(h.name)}</span>${catTag(h.type === "ferie" ? "École" : "Vacances")}</li>`);
+  if (c) rows.push(`<li><span class="t">${c === "moi" ? "Enfants chez moi" : c === "autre" ? "Enfants chez l'autre parent" : "Jour d'échange"}${custodyEstimated(k) ? " <span class=\"muted\">(estimé par règle)</span>" : ""}</span>${catTag("Garde")}</li>`);
+  if (cc) rows.push(`<li><span class="t">🧒 Garde de A² en congé : ${esc(cc.solution || "à organiser")}</span>${catTag("Garde")}</li>`);
+  if (he) rows.push(`<li><span class="t">🐱 Maison vide : Lana ${he.sitter ? "gardée par " + esc(he.sitter) : "sans solution de garde"}</span>${catTag("Maison")}</li>`);
+  events.filter(e => visible(e) && inRange(k, e.date, e.end)).forEach(e =>
+    rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : ""}</span></li>`));
+  return rows.length ? rows.join("") : `<li class="muted">Rien de particulier ce jour-là.</li>`;
+}
 
 function render() {
   document.getElementById("title").textContent = cur.toLocaleDateString("fr-BE", { month: "long", year: "numeric" });
@@ -53,36 +79,54 @@ function render() {
   const first = new Date(cur);
   const offset = (first.getDay() + 6) % 7;
   const start = new Date(first); start.setDate(1 - offset);
-  const todayIso = iso(new Date());
+  const today = todayIso();
   for (let i = 0; i < 42; i++) {
     const d = new Date(start); d.setDate(start.getDate() + i);
     const k = iso(d), h = holidayOn(k), c = custodyOn(k);
-    const cls = ["day", d.getMonth() !== cur.getMonth() && "other", k === todayIso && "today",
+    const cls = ["day", d.getMonth() !== cur.getMonth() && "other", k === today && "today", k === selDay && "sel",
       h && (h.type === "ferie" ? "ferie" : h.type === "vacances" ? "vac" : ""), c && "garde-" + c, c && custodyEstimated(k) && "est"].filter(Boolean).join(" ");
-    const evs = events.filter(e => visible(e) && inRange(k, e.date, e.end)).slice(0, 4)
+    const list = events.filter(e => visible(e) && inRange(k, e.date, e.end));
+    const evs = list.slice(0, 4)
       .map(e => `<span class="ev" style="border-color:${personColor(e.person)}" title="${esc(e.title)}">${esc((e.time ? e.time + " " : "") + e.title)}</span>`).join("");
-    g.insertAdjacentHTML("beforeend", `<div class="${cls}"><span class="n">${d.getDate()}</span>${careByDay[k] ? `<span class="ev" style="border-color:${personColor("alixia")}" title="Garde de A² pendant le congé">🧒 ${esc(careByDay[k].solution || "garde à organiser")}</span>` : ""}${houseEmptyOn(k) ? `<span class="ev" style="border-color:${personColor("lana")}" title="Maison vide">🐱 ${esc(houseEmptyOn(k).sitter || "à organiser")}</span>` : ""}${h && h.type !== "vacances" ? `<span class="ev">${esc(h.name)}</span>` : ""}${evs}</div>`);
+    const dots = [...(careByDay[k] ? [personColor("alixia")] : []), ...(houseEmptyOn(k) ? [personColor("lana")] : []),
+      ...(h && h.type === "ferie" ? ["#d92d20"] : []), ...list.map(e => personColor(e.person))];
+    const dotHtml = dots.slice(0, 6).map(col => `<i style="background:${col}"></i>`).join("") + (dots.length > 6 ? `<b>+${dots.length - 6}</b>` : "");
+    g.insertAdjacentHTML("beforeend", `<div class="${cls}" data-d="${k}" role="button" tabindex="0" aria-label="${esc(longDay(k))}"><span class="n">${d.getDate()}</span><span class="evs">${careByDay[k] ? `<span class="ev" style="border-color:${personColor("alixia")}" title="Garde de A² pendant le congé">🧒 ${esc(careByDay[k].solution || "garde à organiser")}</span>` : ""}${houseEmptyOn(k) ? `<span class="ev" style="border-color:${personColor("lana")}" title="Maison vide">🐱 ${esc(houseEmptyOn(k).sitter || "à organiser")}</span>` : ""}${h && h.type !== "vacances" ? `<span class="ev">${esc(h.name)}</span>` : ""}${evs}</span><span class="dots">${dotHtml}</span></div>`);
   }
-  document.getElementById("upd").textContent = window.CALENDAR_UPDATED ? "Agendas synchronisés le " + new Date(window.CALENDAR_UPDATED).toLocaleString("fr-BE") : "Agendas Google non synchronisés";
+  document.getElementById("dTitle").textContent = longDay(selDay);
+  document.getElementById("dList").innerHTML = dayDetail(selDay);
+  document.getElementById("upd").textContent = window.CALENDAR_UPDATED ? "Agendas synchronisés le " + new Date(window.CALENDAR_UPDATED).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" }) : "Agendas Google non synchronisés";
 }
 
 function upcoming() {
-  const today = iso(new Date()), limit = iso(new Date(Date.now() + 30 * MS));
+  const today = todayIso(), limit = iso(new Date(Date.now() + 30 * MS));
+  // Garde : seulement la période en cours et la suivante (sinon une ligne par semaine noie le reste).
+  const custody = custodyPeriods().filter(p => p.end >= today && p.start <= limit).slice(0, 2);
   const rows = [
-    ...events.filter(e => visible(e) && e.end >= today && e.date <= limit).map(e => ({ date: e.date, text: e.title, tag: e.source })),
-    ...custodyPeriods().filter(p => p.end >= today && p.start <= limit).map(p => ({ date: p.start < today ? today : p.start, text: (p.who === "moi" ? "Enfants chez moi" : "Enfants chez l'autre parent") + " jusqu'au " + fmt(parse(p.end)), tag: "Garde" })),
-    ...childcareGaps().filter(g => g.end >= today && g.start <= limit).map(g => ({ date: g.start, text: "Garde de A² à organiser (" + g.holiday.replace(/ \(.*\)/, "") + ") jusqu'au " + fmt(parse(g.end)), tag: "Garde" })),
-    ...(window.HOUSE_EMPTY || []).filter(a => a.end >= today && a.start <= limit).map(a => ({ date: a.start, text: "Maison vide : Lana " + (a.sitter ? "gardée par " + a.sitter : "sans solution de garde") + " (" + (a.note || "") + ")", tag: "Lana" })),
-    ...(window.SCHOOL_HOLIDAYS || []).filter(h => h.end >= today && h.start <= limit).map(h => ({ date: h.start, text: h.name, tag: "École" }))
-  ].sort((a, b) => a.date.localeCompare(b.date));
+    ...events.filter(e => visible(e) && e.end >= today && e.date <= limit).map(e => ({ start: e.date, text: e.title, tag: e.source })),
+    ...custody.map(p => ({ start: p.start, text: (p.who === "moi" ? "Enfants chez moi" : "Enfants chez l'autre parent") + " jusqu'au " + fmt(parse(p.end)), tag: "Garde" })),
+    ...childcareGaps().filter(g => g.end >= today && g.start <= limit).map(g => ({ start: g.start, text: "Garde de A² à organiser (" + g.holiday.replace(/ \(.*\)/, "") + ") jusqu'au " + fmt(parse(g.end)), tag: "Garde" })),
+    ...(window.HOUSE_EMPTY || []).filter(a => a.end >= today && a.start <= limit).map(a => ({ start: a.start, text: "Maison vide : Lana " + (a.sitter ? "gardée par " + a.sitter : "sans solution de garde") + " (" + (a.note || "") + ")", tag: "Lana" })),
+    ...(window.SCHOOL_HOLIDAYS || []).filter(h => h.end >= today && h.start <= limit).map(h => ({ start: h.start, text: h.name + (h.end > h.start ? " jusqu'au " + fmt(parse(h.end)) : ""), tag: "École" }))
+  ].sort((a, b) => (a.start < today ? today : a.start).localeCompare(b.start < today ? today : b.start));
+  const when = s => (s < today ? "en cours" : s === today ? "aujourd'hui" : fmt(parse(s)));
   document.getElementById("upcoming").innerHTML = rows.length
-    ? rows.map(r => `<li><span class="muted" style="min-width:90px">${fmt(parse(r.date))}</span><span class="t">${esc(r.text)}</span>${catTag(r.tag)}</li>`).join("")
+    ? rows.map(r => `<li class="item up"><span class="muted when">${when(r.start)}</span><span class="t">${esc(r.text)}</span><span class="meta">${catTag(r.tag)}</span></li>`).join("")
     : `<li class="muted">Rien de prévu.</li>`;
 }
 
-document.getElementById("prev").onclick = () => { cur.setMonth(cur.getMonth() - 1); render(); };
-document.getElementById("next").onclick = () => { cur.setMonth(cur.getMonth() + 1); render(); };
-document.getElementById("today").onclick = () => { cur = new Date(); cur.setDate(1); render(); };
+function goMonth(n) {
+  cur.setMonth(cur.getMonth() + n);
+  const t = new Date();
+  selDay = cur.getFullYear() === t.getFullYear() && cur.getMonth() === t.getMonth() ? todayIso() : iso(cur);
+  render();
+}
+document.getElementById("prev").onclick = () => goMonth(-1);
+document.getElementById("next").onclick = () => goMonth(1);
+document.getElementById("today").onclick = () => { cur = new Date(); cur.setDate(1); selDay = todayIso(); render(); };
+const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.dataset.d; render(); const f = document.querySelector(".day.sel"); if (f) f.focus({ preventScroll: true }); } };
+document.getElementById("grid").addEventListener("click", pick);
+document.getElementById("grid").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
 render(); upcoming();
 </script>
 </body>

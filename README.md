@@ -57,3 +57,6 @@ Le workflow « Publier sur Cloudflare » publie le site (pages, `assets/`, `data
 4. Actions → « Publier sur Cloudflare » → Run workflow. Le site est publié sur `https://<projet>.pages.dev` (nom du projet : variable optionnelle `CF_PAGES_PROJECT`, défaut `family-planning-ryson282`).
 5. **Protéger l'accès avant de partager l'adresse** : Cloudflare → projet Pages → Settings → *Access policy* (Zero Trust, gratuit) → autoriser uniquement les e-mails de la famille (code à usage unique).
 Sans les secrets, le workflow ne fait rien.
+
+### Installer sur l'écran d'accueil (Android)
+Le site fournit un manifeste (`manifest.webmanifest`) et une icône : dans Chrome, menu ⋮ → « Ajouter à l'écran d'accueil » (ou « Installer l'application ») ouvre le site en plein écran. Pas de mode hors ligne : les données sont toujours celles de la dernière publication.

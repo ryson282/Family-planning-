@@ -48,3 +48,12 @@ Sans configuration, les tâches restent dans le navigateur de chaque appareil. P
 
 La synchronisation se fait au chargement, toutes les minutes et au retour sur la page ; la modification la plus récente gagne. Hors ligne, les tâches restent utilisables et sont renvoyées ensuite.
 Attention : toute personne qui possède l'adresse et la clé peut lire et modifier les tâches ; le dépôt doit rester **privé**. Utiliser uniquement la clé publique (`anon` / `publishable`), jamais la clé `service_role` ou « secret ». Il faut aussi que la page soit accessible sur chaque appareil (copie du dépôt ou hébergement).
+
+## Consulter le site sur le téléphone (Cloudflare Pages)
+Le workflow « Publier sur Cloudflare » publie le site (pages, `assets/`, `data/`) à chaque fusion dans `main` et après chaque synchronisation des agendas ou des congés.
+1. Cloudflare → My Profile → API Tokens → Create Token → *Create Custom Token* : permission **Account > Cloudflare Pages > Edit**. Copier le jeton.
+2. Copier aussi l'**Account ID** (Workers & Pages, colonne de droite).
+3. GitHub → Settings → Secrets and variables → Actions → deux secrets : `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID`.
+4. Actions → « Publier sur Cloudflare » → Run workflow. Le site est publié sur `https://<projet>.pages.dev` (nom du projet : variable optionnelle `CF_PAGES_PROJECT`, défaut `family-planning-ryson282`).
+5. **Protéger l'accès avant de partager l'adresse** : Cloudflare → projet Pages → Settings → *Access policy* (Zero Trust, gratuit) → autoriser uniquement les e-mails de la famille (code à usage unique).
+Sans les secrets, le workflow ne fait rien.

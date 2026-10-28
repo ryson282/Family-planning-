@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#4f6bed">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <title>Tâches familiales</title>
 <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -137,17 +140,17 @@ function render() {
   const rows = tasks.filter(t => (!f || t.who === f) && (sd || !t.done))
     .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
   document.getElementById("list").innerHTML = rows.length ? rows.map(t => `
-    <li class="${t.done ? "done" : ""}"><input type="checkbox" data-id="${t.id}" ${t.done ? "checked" : ""}>
-    <span class="t">${esc(t.title)}</span><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
-    <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? fmt(parse(t.due)) : ""}</span>
-    <button data-del="${t.id}" title="Supprimer">✕</button></li>`).join("") : `<li class="muted">Aucune tâche.</li>`;
+    <li class="item task ${t.done ? "done" : ""}"><input type="checkbox" data-id="${t.id}" ${t.done ? "checked" : ""} aria-label="Terminée">
+    <span class="t">${esc(t.title)}</span><span class="meta"><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
+    <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? fmt(parse(t.due)) : ""}</span></span>
+    <button data-del="${t.id}" title="Supprimer" aria-label="Supprimer">✕</button></li>`).join("") : `<li class="muted">Aucune tâche.</li>`;
   const s = suggestions();
   document.getElementById("sugg").hidden = !s.length;
-  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li><span class="t">${esc(x.title)}</span>${catTag(x.cat)}<span class="muted">avant le ${fmt(parse(x.due))}</span><button data-s="${i}">Ajouter</button></li>`).join("");
+  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${fmt(parse(x.due))}</span></span><button data-s="${i}">Ajouter</button></li>`).join("");
   window._s = s;
   const o = outings();
   document.getElementById("out").hidden = !o.length;
-  document.getElementById("outList").innerHTML = o.map((x, i) => `<li><span class="t">${esc(x.text)}</span>${catTag("Sorties")}<button data-o="${i}">Ajouter</button></li>`).join("");
+  document.getElementById("outList").innerHTML = o.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.text)}</span><span class="meta">${catTag("Sorties")}</span><button data-o="${i}">Ajouter</button></li>`).join("");
   window._o = o;
 }
 

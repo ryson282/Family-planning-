@@ -3,17 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#4f6bed">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <title>Semaine type</title>
 <link rel="stylesheet" href="assets/style.css">
 <style>
-.tl{display:grid;grid-template-columns:44px repeat(var(--n),minmax(118px,1fr));overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.tl{display:grid;grid-template-columns:44px repeat(var(--n),minmax(104px,1fr));overflow-x:auto;scroll-snap-type:x proximity;overscroll-behavior-x:contain;border:1px solid var(--line);border-radius:10px;background:var(--card)}
 .tl .hd{position:sticky;top:0;z-index:1;background:var(--card);border-bottom:1px solid var(--line);padding:6px 4px;font-weight:600;font-size:.85rem;text-align:center}
 .tl .hd i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:var(--pc)}
 .tl .col{position:relative;border-left:1px solid var(--line);height:var(--h)}
-.tl .hours{position:relative;height:var(--h);font-size:.7rem;color:var(--muted)}
+.tl .hours{position:sticky;left:0;z-index:2;background:var(--card);height:var(--h);font-size:.75rem;color:var(--muted)}
+.tl .hd.corner{position:sticky;left:0;z-index:3}
+.tl .col,.tl .hd{scroll-snap-align:start}
 .tl .hours span{position:absolute;right:4px;transform:translateY(-50%)}
 .tl .grid{position:absolute;left:0;right:0;border-top:1px dashed var(--line)}
-.blk{position:absolute;left:3px;right:3px;box-sizing:border-box;overflow:hidden;padding:2px 5px;font-size:.72rem;line-height:1.25;border-radius:6px;border-left:4px solid var(--pc);background:color-mix(in srgb,var(--pc) 22%,var(--card))}
+.blk{position:absolute;left:3px;right:3px;box-sizing:border-box;overflow:hidden;padding:2px 5px;font-size:.78rem;line-height:1.25;border-radius:6px;border-left:4px solid var(--pc);background:color-mix(in srgb,var(--pc) 22%,var(--card))}
 .blk b{display:block;font-weight:600}
 .blk.est{border-style:dashed;border-left-style:solid;border:1px dashed var(--pc);border-left:4px solid var(--pc)}
 .blk.k-travel{background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--pc) 14%,var(--card)),color-mix(in srgb,var(--pc) 14%,var(--card)) 6px,color-mix(in srgb,var(--pc) 28%,var(--card)) 6px,color-mix(in srgb,var(--pc) 28%,var(--card)) 12px)}
@@ -21,6 +26,12 @@
 .blk.k-act{background:color-mix(in srgb,#22c55e 24%,var(--card))}
 .bar2{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
 .alerts li{display:block;padding:6px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:99px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-size:.9rem}
+.chip i{width:10px;height:10px;border-radius:50%;background:var(--pc)}
+.chip[aria-pressed=true]{background:color-mix(in srgb,var(--pc) 24%,var(--card));border-color:var(--pc);font-weight:600}
+.bar2 select{min-height:44px}
+.hint{display:none}@media(max-width:640px){.hint{display:block}}
 .warn{color:#b45309}
 @media (prefers-color-scheme:dark){.warn{color:#fbbf24}}
 </style>
@@ -30,10 +41,12 @@
 <main>
   <section class="card">
     <div class="bar2">
-      <label>Vue <select id="mode"><option value="day">Par jour (une colonne par personne)</option><option value="person">Par personne (une colonne par jour)</option></select></label>
+      <label>Vue <select id="mode"><option value="day">Par jour</option><option value="person">Par personne</option></select></label>
       <label id="pickDay">Jour <select id="day"></select></label>
       <label id="pickPerson" hidden>Personne <select id="person"></select></label>
     </div>
+    <div class="chips" id="chips" role="group" aria-label="Colonnes affichées"></div>
+    <p class="muted hint">Faites défiler le tableau vers la droite pour voir les autres colonnes.</p>
     <div class="tl" id="tl"></div>
     <p class="muted">Temps scolaire (la piscine de Lukas et l'école s'arrêtent pendant les congés). Bordure pointillée : horaire estimé ou à confirmer. Hachuré : trajet. Orange : garderie. Vert : activité.</p>
   </section>
@@ -110,19 +123,33 @@ function eventsFor(p, d) {
 const LO = 6 * 60, HI = 21.5 * 60, PX = 0.85, H = (HI - LO) * PX;
 function render() {
   const mode = document.getElementById("mode").value, d = +document.getElementById("day").value, p = document.getElementById("person").value;
-  const lanes = mode === "day" ? ORDER.map(id => ({ title: shortName(id), color: personColor(id), events: eventsFor(id, d) }))
-    : DAYS.map(([n, name]) => ({ title: name, color: personColor(p), events: eventsFor(p, n) }));
+  const lanes = mode === "day" ? ORDER.filter(id => shown.p.has(id)).map(id => ({ title: shortName(id), color: personColor(id), events: eventsFor(id, d) }))
+    : DAYS.filter(([n]) => shown.d.has(n)).map(([n, name]) => ({ title: name, color: personColor(p), events: eventsFor(p, n) }));
+  renderChips(mode, p);
   const tl = document.getElementById("tl");
   tl.style.setProperty("--n", lanes.length); tl.style.setProperty("--h", H + "px");
   let hours = "";
   for (let h = Math.ceil(LO / 60); h <= HI / 60; h++) hours += `<span style="top:${(h * 60 - LO) * PX}px">${h} h</span>`;
   const grid = [...Array(Math.floor(HI / 60) - Math.ceil(LO / 60) + 1)].map((_, i) => `<div class="grid" style="top:${(Math.ceil(LO / 60) * 60 + i * 60 - LO) * PX}px"></div>`).join("");
-  tl.innerHTML = `<div class="hd"></div>` + lanes.map(l => `<div class="hd" style="--pc:${l.color}"><i></i>${esc(l.title)}</div>`).join("")
+  tl.innerHTML = `<div class="hd corner"></div>` + lanes.map(l => `<div class="hd" style="--pc:${l.color}"><i></i>${esc(l.title)}</div>`).join("")
     + `<div class="hours">${hours}</div>`
     + lanes.map(l => `<div class="col" style="--pc:${l.color}">${grid}${l.events.map(e => {
       const top = (Math.max(e.a, LO) - LO) * PX, h = Math.max((Math.min(e.b, HI) - Math.max(e.a, LO)) * PX, 14);
       return `<div class="blk ${e.kind ? "k-" + e.kind : ""} ${e.est ? "est" : ""}" style="top:${top}px;height:${h}px" title="${esc(e.label)} ${T(e.a)}-${T(e.b)}"><b>${esc(e.label)}</b>${T(e.a)} – ${T(e.b)}</div>`;
     }).join("")}</div>`).join("");
+}
+
+// Pastilles pour choisir les colonnes affichées (personnes en vue « par jour », jours en vue « par personne »).
+const shown = { p: new Set(ORDER), d: new Set(DAYS.map(x => x[0])) };
+function renderChips(mode, person) {
+  const items = mode === "day" ? ORDER.map(id => [id, shortName(id), personColor(id), shown.p.has(id)]) : DAYS.map(([n, name]) => [n, name, personColor(person), shown.d.has(n)]);
+  const box = document.getElementById("chips");
+  box.innerHTML = items.map(([id, label, col, on]) => `<button type="button" class="chip" style="--pc:${col}" aria-pressed="${on}" data-k="${id}"><i></i>${esc(label)}</button>`).join("");
+  box.querySelectorAll(".chip").forEach(b => b.onclick = () => {
+    const set = mode === "day" ? shown.p : shown.d, key = mode === "day" ? b.dataset.k : +b.dataset.k;
+    if (set.has(key)) { if (set.size > 1) set.delete(key); } else set.add(key);
+    render();
+  });
 }
 
 // Points de vigilance déduits des horaires.

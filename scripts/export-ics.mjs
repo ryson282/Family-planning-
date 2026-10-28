@@ -1,5 +1,5 @@
 // Génère export/garde-estimee.ics : planning de garde estimé (règles de data/custody.js) APRÈS le dernier
-// événement réel de l'agenda. Même format de titres que l'agenda d'origine ("A²-> Yves"), journées entières,
+// événement réel de l'agenda. Titres « Garde A² chez Yves » / « A² chez Emeline », journées entières,
 // jour de passage partagé entre deux périodes. À importer dans Google Agenda (Paramètres > Importer et exporter).
 import vm from "node:vm";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -31,15 +31,17 @@ for (const r of runs) {
   if (run(`custodyCovered("${after}")`) && run(`custodyOn("${after}")`) !== r.who) r.end = after;
 }
 
+// Titres des événements générés (le prénom d'Emeline n'apparaît que dans cet export, pas dans le site).
+const TITLES = { moi: "Garde A² chez Yves", autre: "A² chez Emeline" };
 const ymd = s => s.replaceAll("-", "");
 const next = s => ymd(run(`addDays("${s}", 1)`)); // DTEND exclusif
 const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
 const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Family planning//Garde estimee//FR", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Garde A² (estimée)"];
 for (const r of runs) {
-  const name = r.who === "moi" ? c.me : c.other;
+  const title = r.who === "moi" ? TITLES.moi : TITLES.autre;
   lines.push("BEGIN:VEVENT", `UID:garde-${r.start}-${r.who}@family-planning`, `DTSTAMP:${stamp}`,
     `DTSTART;VALUE=DATE:${ymd(r.start)}`, `DTEND;VALUE=DATE:${next(r.end)}`,
-    `SUMMARY:A²-> ${name}`, "DESCRIPTION:Estimation par règle (data/custody.js)", "TRANSP:TRANSPARENT", "END:VEVENT");
+    `SUMMARY:${title}`, "DESCRIPTION:Estimation par règle (data/custody.js)", "TRANSP:TRANSPARENT", "END:VEVENT");
 }
 lines.push("END:VCALENDAR");
 writeFileSync("export/garde-estimee.ics", lines.join("\r\n") + "\r\n");

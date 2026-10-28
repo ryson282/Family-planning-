@@ -173,6 +173,17 @@ function outingWindows(today, horizon) {
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
+// Libellé affiché pour un agenda (data/calendar-filters.js) : « Emeline » devient « Garde A² ».
+const calendarLabel = name => (window.CALENDAR_LABELS || {})[name] || name;
+
+// Agendas dont on ne garde qu'une partie des événements (voir data/calendar-filters.js).
+function calendarAllows(e) {
+  const rule = (window.CALENDAR_ONLY || {})[e.calendar];
+  if (!rule) return true;
+  const re = rule === "custody" ? (window.CUSTODY && window.CUSTODY.titleRegex) : rule;
+  return !re || new RegExp(re).test(e.title);
+}
+
 function isCustodyEvent(e) {
   const c = window.CUSTODY;
   return !!(c && c.enabled && new RegExp(c.titleRegex).test(e.title));
@@ -185,7 +196,7 @@ function isHidden(e) {
 // Tous les événements ponctuels, normalisés : { date (début), end, title, source, person }
 function allEvents() {
   const out = [];
-  (window.CALENDAR_EVENTS || []).filter(e => !isCustodyEvent(e) && !isHidden(e)).forEach(e => out.push({ date: e.start.slice(0, 10), end: (e.end || e.start).slice(0, 10), title: e.title, source: e.calendar, person: (window.CALENDAR_OWNERS || {})[e.calendar], time: e.allDay ? "" : e.start.slice(11, 16) }));
+  (window.CALENDAR_EVENTS || []).filter(e => calendarAllows(e) && !isCustodyEvent(e) && !isHidden(e)).forEach(e => out.push({ date: e.start.slice(0, 10), end: (e.end || e.start).slice(0, 10), title: e.title, source: e.calendar, person: (window.CALENDAR_OWNERS || {})[e.calendar], time: e.allDay ? "" : e.start.slice(11, 16) }));
   (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.end || e.date, title: e.title, source: "École", person: e.person }));
   return out;
 }
@@ -193,8 +204,8 @@ function allEvents() {
 // Tag coloré selon le type d'action (catégorie) : Garde, École, Administratif, Santé, Activités, Vacances, Sorties, Maison, Autre.
 function catTag(cat) {
   const key = String(cat || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  const known = ["garde", "ecole", "administratif", "sante", "activites", "vacances", "sorties", "maison"];
-  return `<span class="tag cat-${known.includes(key) ? key : "autre"}">${esc(cat)}</span>`;
+  const known = ["garde", "ecole", "administratif", "sante", "activites", "vacances", "sorties", "maison"].find(k => key === k || key.startsWith(k + " "));
+  return `<span class="tag cat-${known || "autre"}">${esc(cat)}</span>`;
 }
 
 function personColor(id) {

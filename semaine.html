@@ -97,7 +97,7 @@ function eventsFor(p, d) {
       if (w.back) out.push(ev(w.start || w.leaves, Array.isArray(w.back) ? w.back[0] : "17:00", `${w.place}${Array.isArray(w.back) ? " (retour " + T(M(w.back[0])) + "-" + T(M(w.back[1])) + ")" : " (retour après 17 h)"}`, { est: !!w.leaves }));
       else out.push(ev(w.start, w.end, w.place));
     }
-    (s.activities || []).filter(a => a.days.includes(d) && a.start).forEach(a => out.push(ev(a.start, a.end, a.name + (a.place ? " (" + a.place + ")" : ""), { kind: "act", est: a.uncertain })));
+    (s.activities || []).filter(a => a.days.includes(d) && a.start).forEach(a => out.push(ev(a.start, a.end, a.name + (a.place ? " (" + a.place + ")" : a.walking ? " (à pied)" : a.by ? " (" + a.by + ")" : ""), { kind: "act", est: a.uncertain })));
   } else if (p === "lukas") {
     const sc = s.school; out.push(ev(sc.start, endOf(sc, d), "École"));
     (s.activities || []).filter(a => a.days.includes(d)).forEach(a => out.push(ev(a.start, a.end, a.name, { kind: "act" })));

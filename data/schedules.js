@@ -1,6 +1,8 @@
 // Horaires habituels en temps scolaire (hors congés). Jours : 1 = lundi ... 5 = vendredi. Heures "HH:MM".
 // À compléter : Louanne (jours de cours, autres activités) et Émilie (autres activités éventuelles).
 window.SCHEDULES = {
+  // Deux voitures : la Dacia d'Yves et la Kia d'Émilie.
+  cars: { Dacia: "moi", Kia: "emilie" },
   // Yves : télétravail tous les jours sauf le mardi (train pour Bruxelles).
   moi: {
     work: {
@@ -21,10 +23,10 @@ window.SCHEDULES = {
       5: { place: "maison (télétravail)", start: "08:00", end: "12:00" }
     },
     activities: [
-      { name: "Pilates (avec Louanne)", days: [3], start: "19:00", end: "20:25", by: "voiture", note: "en voiture ; rentrées à la maison vers 20 h 25 en général" },
+      { name: "Pilates (avec Louanne)", days: [3], start: "19:00", end: "20:25", by: "Kia", note: "en Kia (Émilie) ; rentrées à la maison vers 20 h 25 en général" },
       { name: "Sport avec sa coach", days: [5], start: "16:30", end: "17:30", place: "à la maison" },
-      { name: "Sport (body girly)", days: [1], start: null, end: null, uncertain: true, note: "le soir ; horaire à confirmer" },
-      { name: "Pilates (mardi)", days: [2], start: "17:00", end: "18:00", uncertain: true, note: "plutôt tôt (vers 17 h à 18 h) ; horaire à confirmer" }
+      { name: "Sport (body girly)", days: [1], start: "19:15", end: "19:45", walking: true, note: "à pied" },
+      { name: "Pilates (mardi)", days: [2], start: "17:30", end: "18:25", by: "Kia", note: "55 min, en Kia" }
     ]
   },
   // Lukas : école 8 h 25, fin 16 h (mercredi 12 h). Piscine le vendredi, conduite par Yves qui travaille depuis la cafétéria.
@@ -54,12 +56,12 @@ window.SCHEDULES = {
   louanne: {
     home: true,
     // Trajet vers l'université : train / bus, sauf le lundi soir où Yves va la chercher en voiture (fin des cours à 18 h).
-    commute: { mode: "train / bus", morning: { train: "06:40", from: "Waremme", to: "Liège-Guillemins", then: "bus", inClassAt: "08:15" }, classesEnd: "variable", pickup: { days: [1], by: "moi", car: true, classesEnd: "18:00" } },
+    commute: { mode: "train / bus", morning: { train: "06:40", from: "Waremme", to: "Liège-Guillemins", then: "bus", inClassAt: "08:15" }, classesEnd: "variable", pickup: { days: [1], by: "moi", car: "Dacia", classesEnd: "18:00" } },
     // Solfège et piano : à distance de marche de la maison, personne ne l'y emmène.
     activities: [
       { name: "Solfège", days: [1], start: "19:10", end: "20:50", walking: true },
       { name: "Piano", days: [4], start: "20:00", end: "20:50", walking: true },
-      { name: "Pilates (avec Émilie)", days: [3], start: "19:00", end: "20:25", by: "voiture", note: "en voiture ; rentrées à la maison vers 20 h 25 en général" }
+      { name: "Pilates (avec Émilie)", days: [3], start: "19:00", end: "20:25", by: "Kia", note: "en Kia (Émilie) ; rentrées à la maison vers 20 h 25 en général" }
     ] // liste incomplète : d'autres activités à ajouter
   },
   // Enchaînements types de la semaine.

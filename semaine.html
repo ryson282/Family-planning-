@@ -160,7 +160,10 @@ function alerts() {
   out.push(`<span class="warn">Vendredi :</span> piscine de Lukas ${T(M(pool.blocked[0]))} à ${T(M(pool.blocked[1]))} (temps scolaire), puis garderie avant ${T(close)} : marge de ${close - M(pool.blocked[1])} min.`);
   const r = S.routines[0];
   out.push(`<span class="warn">Lundi soir :</span> ${r.steps.join(" → ")}. Créneau estimé de ${T(M(r.estimated[0]))} à ${T(M(r.estimated[1]))} ; solfège de Louanne à ${T(M(S.louanne.activities[0].start))}.`);
-  out.push(`<span class="warn">Voiture :</span> utilisée le lundi soir (Louanne à Liège) et le mercredi à 19 h (pilates d'Émilie et Louanne).`);
+  const car = new Map([["1", `lundi vers ${T(M(r.estimated[0]))} (Louanne à Liège)`]]);
+  [S.emilie, S.louanne].forEach(x => (x.activities || []).filter(a => a.by === "voiture").forEach(a => a.days.forEach(n =>
+    car.set(`${n}${a.start}`, `${DAYS.find(([k]) => k === n)[1].toLowerCase()} à ${T(M(a.start))} (${a.name.replace(/ \(.*\)/, "").toLowerCase()})`))));
+  out.push(`<span class="warn">Voiture :</span> ${[...car].sort(([a], [b]) => a.localeCompare(b)).map(x => x[1]).join(" ; ")}.`);
   const todo = [];
   [S.emilie, S.louanne].forEach((x, i) => (x.activities || []).filter(a => a.uncertain).forEach(a => todo.push(`${a.name} (${i ? "Louanne" : "Émilie"}) : ${a.note || "à confirmer"}`)));
   if (todo.length) out.push(`<span class="warn">À préciser :</span> ${todo.map(esc).join(" ; ")}.`);

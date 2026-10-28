@@ -71,7 +71,7 @@ function dayDetail(k) {
   if (cc) rows.push(`<li><span class="t">🧒 Garde de A² en congé : ${esc(cc.solution || "à organiser")}</span>${catTag("Garde")}</li>`);
   if (he) rows.push(`<li><span class="t">🐱 Maison vide : Lana ${he.sitter ? "gardée par " + esc(he.sitter) : "sans solution de garde"}</span>${catTag("Maison")}</li>`);
   events.filter(e => visible(e) && inRange(k, e.date, e.end) && !(offByDay[k] && /^Congé : /.test(e.title))).forEach(e =>
-    rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : e.source ? ` <span class="muted">· agenda ${esc(e.source)}</span>` : ""}</span></li>`));
+    rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : e.source ? ` <span class="muted">· ${esc(calendarLabel(e.source))}</span>` : ""}</span></li>`));
   return rows.length ? rows.join("") : `<li class="muted">Rien de particulier ce jour-là.</li>`;
 }
 
@@ -106,7 +106,7 @@ function upcoming() {
   // Garde : seulement la période en cours et la suivante (sinon une ligne par semaine noie le reste).
   const custody = custodyPeriods().filter(p => p.end >= today && p.start <= limit).slice(0, 2);
   const rows = [
-    ...events.filter(e => visible(e) && e.end >= today && e.date <= limit).map(e => ({ start: e.date, text: e.title, tag: e.source })),
+    ...events.filter(e => visible(e) && e.end >= today && e.date <= limit).map(e => ({ start: e.date, text: e.title, tag: calendarLabel(e.source) })),
     ...custody.map(p => ({ start: p.start, text: (p.who === "moi" ? "Enfants chez moi" : "Enfants chez l'autre parent") + " jusqu'au " + fmt(parse(p.end)), tag: "Garde" })),
     ...childcareGaps().filter(g => g.end >= today && g.start <= limit).map(g => ({ start: g.start, text: "Garde de A² à organiser (" + g.holiday.replace(/ \(.*\)/, "") + ") jusqu'au " + fmt(parse(g.end)), tag: "Garde" })),
     ...(window.HOUSE_EMPTY || []).filter(a => a.end >= today && a.start <= limit).map(a => ({ start: a.start, text: "Maison vide : Lana " + (a.sitter ? "gardée par " + a.sitter : "sans solution de garde") + " (" + (a.note || "") + ")", tag: "Lana" })),

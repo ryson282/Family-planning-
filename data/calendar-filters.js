@@ -4,3 +4,8 @@
 window.CALENDAR_ONLY = {
   "Emeline": "custody"
 };
+
+// Nom affiché à la place du nom de l'agenda (étiquettes, détail du jour) : aucun prénom de l'autre parent dans le planning.
+window.CALENDAR_LABELS = {
+  "Emeline": "Garde A²"
+};

@@ -173,6 +173,9 @@ function outingWindows(today, horizon) {
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
+// Libellé affiché pour un agenda (data/calendar-filters.js) : « Emeline » devient « Garde A² ».
+const calendarLabel = name => (window.CALENDAR_LABELS || {})[name] || name;
+
 // Agendas dont on ne garde qu'une partie des événements (voir data/calendar-filters.js).
 function calendarAllows(e) {
   const rule = (window.CALENDAR_ONLY || {})[e.calendar];
@@ -201,8 +204,8 @@ function allEvents() {
 // Tag coloré selon le type d'action (catégorie) : Garde, École, Administratif, Santé, Activités, Vacances, Sorties, Maison, Autre.
 function catTag(cat) {
   const key = String(cat || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  const known = ["garde", "ecole", "administratif", "sante", "activites", "vacances", "sorties", "maison"];
-  return `<span class="tag cat-${known.includes(key) ? key : "autre"}">${esc(cat)}</span>`;
+  const known = ["garde", "ecole", "administratif", "sante", "activites", "vacances", "sorties", "maison"].find(k => key === k || key.startsWith(k + " "));
+  return `<span class="tag cat-${known || "autre"}">${esc(cat)}</span>`;
 }
 
 function personColor(id) {

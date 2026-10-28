@@ -1,5 +1,5 @@
 // Génère export/garde-estimee.ics : planning de garde estimé (règles de data/custody.js) APRÈS le dernier
-// événement réel de l'agenda. Titres « Garde A² chez Yves » / « A² pas là » (aucun prénom), journées entières,
+// événement réel de l'agenda. Titres « Garde A² chez Yves » / « A² chez Emeline », journées entières,
 // jour de passage partagé entre deux périodes. À importer dans Google Agenda (Paramètres > Importer et exporter).
 import vm from "node:vm";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -31,8 +31,8 @@ for (const r of runs) {
   if (run(`custodyCovered("${after}")`) && run(`custodyOn("${after}")`) !== r.who) r.end = after;
 }
 
-// Titres des événements générés (aucun prénom de l'autre parent).
-const TITLES = { moi: "Garde A² chez Yves", autre: "A² pas là" };
+// Titres des événements générés (le prénom d'Emeline n'apparaît que dans cet export, pas dans le site).
+const TITLES = { moi: "Garde A² chez Yves", autre: "A² chez Emeline" };
 const ymd = s => s.replaceAll("-", "");
 const next = s => ymd(run(`addDays("${s}", 1)`)); // DTEND exclusif
 const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";

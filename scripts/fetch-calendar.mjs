@@ -1,7 +1,18 @@
 // Télécharge les agendas Google (adresses iCal secrètes) et génère data/calendar.js.
 // Variable d'environnement ICS_URLS : une entrée par ligne, au format "Nom|https://...basic.ics".
 import ICAL from "ical.js";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
+import vm from "node:vm";
+
+// Agendas dont on ne retient qu'une partie des événements (data/calendar-filters.js), ex. l'alternance de garde seulement.
+const ctx = vm.createContext({ window: {} }); ctx.window = ctx;
+for (const f of ["data/custody.js", "data/calendar-filters.js"]) vm.runInContext(readFileSync(f, "utf8"), ctx);
+const only = ctx.CALENDAR_ONLY || {};
+const keep = e => {
+  const rule = only[e.calendar];
+  if (!rule) return true;
+  return new RegExp(rule === "custody" ? ctx.CUSTODY.titleRegex : rule).test(e.title);
+};
 
 const entries = (process.env.ICS_URLS || "").split("\n").map(l => l.trim()).filter(Boolean);
 if (!entries.length) { console.error("ICS_URLS est vide."); process.exit(1); }
@@ -41,6 +52,9 @@ function toEvent(calendar, ev, start, end) {
   return { calendar, title: ev.summary || "(sans titre)", allDay, start: local(start.toJSDate()), end: local(e) };
 }
 
+const before = events.length;
+events.splice(0, events.length, ...events.filter(keep));
+if (before !== events.length) console.log(`${before - events.length} événement(s) ignoré(s) (agendas filtrés : ${Object.keys(only).join(", ")}).`);
 events.sort((a, b) => a.start.localeCompare(b.start));
 const js = `// Fichier généré par scripts/fetch-calendar.mjs (GitHub Action). Ne pas modifier à la main.\n` +
   `window.CALENDAR_UPDATED = ${JSON.stringify(new Date().toISOString())};\n` +

@@ -65,12 +65,14 @@ const longDay = k => parse(k).toLocaleDateString("fr-BE", { weekday: "long", day
 // Détail d'un jour (affiché au toucher / au clic) : tout ce qui n'entre pas dans une case du calendrier.
 function dayDetail(k) {
   const h = holidayOn(k), c = custodyOn(k), cc = careByDay[k], he = houseEmptyOn(k), rows = [];
-  if (h) rows.push(`<li><span class="t">${esc(h.name)}${h.type === "ferie" ? " : pas d'école" : ""}</span>${catTag(h.type === "ferie" ? "École" : "Vacances")}</li>`);
-  if (offByDay[k] && !(h && h.type === "ferie")) rows.push(`<li><span class="t">Pas d'école : ${esc(offByDay[k])} <span class="muted">· Alixia, Adrian, Lukas</span></span>${catTag("École")}</li>`);
+  // Congés : une seule ligne regroupant vacances FWB, fériés, congés isolés et vacances ULiège, avec les personnes concernées.
+  const conges = congesOn(k).filter(g => !whoSel.value || g.persons.includes(whoSel.value));
+  if (conges.length) rows.push(`<li><span class="t">${conges.map(g => `${esc(g.name)} <span class="muted">· ${esc(personName(g.persons.join(",")))}</span>`).join("<br>")}</span>${catTag("Congé")}</li>`);
+  if (h && h.type === "rentree") rows.push(`<li><span class="t">${esc(h.name)} <span class="muted">· ${esc(personName(KIDS.join(",")))}</span></span>${catTag("École")}</li>`);
   if (c) rows.push(`<li><span class="t">${c === "moi" ? "Enfants chez moi" : c === "autre" ? "Enfants chez l'autre parent" : "Jour d'échange"}${custodyEstimated(k) ? " <span class=\"muted\">(estimé par règle)</span>" : ""}</span>${catTag("Garde")}</li>`);
   if (cc) rows.push(`<li><span class="t">🧒 Garde de A² en congé : ${esc(cc.solution || "à organiser")}</span>${catTag("Garde")}</li>`);
   if (he) rows.push(`<li><span class="t">🐱 Maison vide : Lana ${he.sitter ? "gardée par " + esc(he.sitter) : "sans solution de garde"}</span>${catTag("Maison")}</li>`);
-  events.filter(e => visible(e) && inRange(k, e.date, e.end) && !(offByDay[k] && /^Congé : /.test(e.title))).forEach(e =>
+  events.filter(e => visible(e) && inRange(k, e.date, e.end) && !CONGE_EVENT.test(e.title)).forEach(e =>
     rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : e.source ? ` <span class="muted">· ${esc(calendarLabel(e.source))}</span>` : ""}</span></li>`));
   return rows.length ? rows.join("") : `<li class="muted">Rien de particulier ce jour-là.</li>`;
 }
@@ -106,11 +108,15 @@ function upcoming() {
   // Garde : seulement la période en cours et la suivante (sinon une ligne par semaine noie le reste).
   const custody = custodyPeriods().filter(p => p.end >= today && p.start <= limit).slice(0, 2);
   const rows = [
-    ...events.filter(e => visible(e) && e.end >= today && e.date <= limit).map(e => ({ start: e.date, text: e.title, tag: calendarLabel(e.source) })),
+    ...events.filter(e => visible(e) && e.end >= today && e.date <= limit && !CONGE_EVENT.test(e.title)).map(e => ({ start: e.date, text: e.title, tag: calendarLabel(e.source) })),
     ...custody.map(p => ({ start: p.start, text: (p.who === "moi" ? "Enfants chez moi" : "Enfants chez l'autre parent") + " jusqu'au " + fmt(parse(p.end)), tag: "Garde" })),
     ...childcareGaps().filter(g => g.end >= today && g.start <= limit).map(g => ({ start: g.start, text: "Garde de A² à organiser (" + g.holiday.replace(/ \(.*\)/, "") + ") jusqu'au " + fmt(parse(g.end)), tag: "Garde" })),
     ...(window.HOUSE_EMPTY || []).filter(a => a.end >= today && a.start <= limit).map(a => ({ start: a.start, text: "Maison vide : Lana " + (a.sitter ? "gardée par " + a.sitter : "sans solution de garde") + " (" + (a.note || "") + ")", tag: "Lana" })),
-    ...(window.SCHOOL_HOLIDAYS || []).filter(h => h.end >= today && h.start <= limit).map(h => ({ start: h.start, text: h.name + (h.end > h.start ? " jusqu'au " + fmt(parse(h.end)) : ""), tag: "École" }))
+    ...(window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "rentree" && h.end >= today && h.start <= limit).map(h => ({ start: h.start, text: h.name + " · " + personName(KIDS.join(",")), tag: "École" })),
+    ...congesUpcoming(today, limit).map(c => ({ ...c, groups: c.groups.filter(g => !whoSel.value || g.persons.includes(whoSel.value)) })).filter(c => c.groups.length).map(c => ({
+      start: c.start, tag: "Congé",
+      text: c.name + " · " + c.groups.map(g => personName(g.persons.join(",")) + (g.end > c.start ? " jusqu'au " + fmt(parse(g.end)) : "")).join(" ; ")
+    }))
   ].sort((a, b) => (a.start < today ? today : a.start).localeCompare(b.start < today ? today : b.start));
   const when = s => (s < today ? "en cours" : s === today ? "aujourd'hui" : fmt(parse(s)));
   document.getElementById("upcoming").innerHTML = rows.length

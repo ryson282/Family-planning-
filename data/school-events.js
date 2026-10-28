@@ -1,7 +1,8 @@
 // Événements de vie scolaire (réunions de parents, bulletins, excursions, examens ULiège...).
 // person : moi | emilie | alixia | adrian | lukas | louanne
 // person peut être une liste séparée par des virgules ("adrian,lukas").
-// Les « Congé : … » (jours sans école) concernent toute la famille scolarisée : Alixia, Adrian et Lukas.
+// Les « Congé : … » (jours sans école) sont consolidés avec les congés FWB et ULiège dans le calendrier ; person = personnes concernées
+// (Mardi gras et Pentecôte : l'ULiège est aussi fermée, donc Louanne aussi).
 // end (optionnel, inclus) : pour un événement sur plusieurs jours.
 // Sources : calendrier annuel 2026-2027 « Version Parents » (primaire) et vade-mecum parents 2026-2027 (secondaire, 3e année), calendriers académiques ULiège et FMV 2026-2027 (Louanne, 1er bachelier).
 window.SCHOOL_EVENTS = [
@@ -13,13 +14,13 @@ window.SCHOOL_EVENTS = [
   { title: "Congé : Fêtes des morts", date: "2026-11-02", person: "alixia,adrian,lukas" },
   { title: "Bulletin 1 – Réunion de parents", date: "2026-11-26", person: "alixia" },
   { title: "Saint Nicolas", date: "2026-12-04", person: "alixia" },
-  { title: "Congé : Mardi gras", date: "2027-02-09", person: "alixia,adrian,lukas" },
+  { title: "Congé : Mardi gras", date: "2027-02-09", person: "alixia,adrian,lukas,louanne" },
   { title: "Carnaval des enfants", date: "2027-02-12", person: "alixia" },
   { title: "Bulletin 2", date: "2027-03-18", person: "alixia" },
   { title: "Classes de neige P5/P6", date: "2027-03-19", end: "2027-03-29", person: "alixia" },
   { title: "Réunions de parents", date: "2027-03-30", person: "alixia" },
   { title: "Fête de l'école", date: "2027-05-15", person: "alixia" },
-  { title: "Congé : Pentecôte", date: "2027-05-17", person: "alixia,adrian,lukas" },
+  { title: "Congé : Pentecôte", date: "2027-05-17", person: "alixia,adrian,lukas,louanne" },
   { title: "CEB", date: "2027-06-21", end: "2027-06-22", person: "alixia" },
   { title: "CEB", date: "2027-06-24", end: "2027-06-25", person: "alixia" },
   { title: "Bulletins, réunions de parents et cérémonie de passage P6", date: "2027-07-01", person: "alixia" },

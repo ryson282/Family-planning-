@@ -20,6 +20,7 @@ Ne jamais mettre ces adresses dans le code. Ce dépôt doit rester **privé** (`
 - `data/schedules.js` : horaires habituels (travail, école, garderie, activités, trajets) de chaque membre de la famille ; alimente la page **Semaine type** (`semaine.html`)
 
 ## Utilisation
+Page **Planning** : vue **Mois** (pastilles, détail du jour au toucher) ou vue **Semaine** (semaine par semaine, comparée à la semaine type de `data/schedules.js` : en rouge ce qui change, est barré ou s'ajoute — congés, enfants chez l'autre parent, sessions d'examens, événements ; case « Seulement les différences »).
 Ouvrir `index.html` dans un navigateur (ou servir le dossier avec `python3 -m http.server`).
 Les tâches sont stockées dans le navigateur (localStorage) ; elles peuvent être partagées entre appareils (voir ci-dessous).
 

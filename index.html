@@ -13,23 +13,38 @@
 <header><h1>Planning familial</h1></header>
 <main>
   <section class="card">
-    <div class="bar">
-      <div class="nav3"><button id="prev" aria-label="Mois précédent">←</button><button id="today">Aujourd'hui</button><button id="next" aria-label="Mois suivant">→</button></div>
-      <h2 id="title"></h2>
+    <div class="bar top">
+      <div class="seg" role="group" aria-label="Vue"><button id="vMonth" aria-pressed="true">Mois</button><button id="vWeek" aria-pressed="false">Semaine</button></div>
       <select id="who" title="Voir les événements de" aria-label="Personne"><option value="">Tout le monde</option></select>
     </div>
-    <p class="muted sync" id="upd"></p>
-    <div class="grid" id="grid"></div>
-    <div class="detail" id="detail" aria-live="polite"><h3 id="dTitle"></h3><ul class="list" id="dList"></ul></div>
-    <details class="legend-box">
-      <summary>Légende</summary>
-      <div class="legend">
-        <span><i style="background:var(--vac)"></i>Vacances scolaires (FWB)</span>
-        <span><i style="background:var(--ferie)"></i>Jour férié ou congé (pas d'école)</span>
-        <span><i style="background:#4f9dff"></i>Enfants chez moi</span><span><i style="background:#b8bfcc"></i>Chez l'autre parent</span><span><i style="background:linear-gradient(90deg,#4f9dff,#b8bfcc)"></i>Échange</span><span>Barre pâle = garde estimée par règle</span><span>🐱 Maison vide</span><span>🧒 Garde de A² en congé</span>
-        <span id="people"></span>
+    <div id="monthView">
+      <div class="bar">
+        <div class="nav3"><button id="prev" aria-label="Mois précédent">←</button><button id="today">Aujourd'hui</button><button id="next" aria-label="Mois suivant">→</button></div>
+        <h2 id="title"></h2>
       </div>
-    </details>
+      <p class="muted sync" id="upd"></p>
+      <div class="grid" id="grid"></div>
+      <div class="detail" id="detail" aria-live="polite"><h3 id="dTitle"></h3><ul class="list" id="dList"></ul><button type="button" id="toWeek" class="linkbtn">Voir la semaine de ce jour →</button></div>
+      <details class="legend-box">
+        <summary>Légende</summary>
+        <div class="legend">
+          <span><i style="background:var(--vac)"></i>Vacances scolaires (FWB)</span>
+          <span><i style="background:var(--ferie)"></i>Jour férié ou congé (pas d'école)</span>
+          <span><i style="background:#4f9dff"></i>Enfants chez moi</span><span><i style="background:#b8bfcc"></i>Chez l'autre parent</span><span><i style="background:linear-gradient(90deg,#4f9dff,#b8bfcc)"></i>Échange</span><span>Barre pâle = garde estimée par règle</span><span>🐱 Maison vide</span><span>🧒 Garde de A² en congé</span>
+          <span id="people"></span>
+        </div>
+      </details>
+    </div>
+    <div id="weekView" hidden>
+      <div class="bar">
+        <div class="nav3"><button id="wPrev" aria-label="Semaine précédente">←</button><button id="wToday">Cette semaine</button><button id="wNext" aria-label="Semaine suivante">→</button></div>
+        <h2 id="wTitle"></h2>
+      </div>
+      <label class="check"><input type="checkbox" id="onlyDiff"> Seulement les différences</label>
+      <p class="wsum" id="wSum" aria-live="polite"></p>
+      <div id="weekList"></div>
+      <p class="muted">Comparé à la <a href="semaine.html">semaine type</a> (temps scolaire). <span class="diff">Rouge</span> : ce qui change ou s'ajoute ; barré : ce qui n'a pas lieu cette semaine.</p>
+    </div>
   </section>
   <section class="card">
     <h2 style="margin-top:0;font-size:1.1rem">À venir (30 jours)</h2>
@@ -45,7 +60,10 @@
 <script src="data/childcare.js"></script>
 <script src="data/calendar.js"></script>
 <script src="data/calendar-filters.js"></script>
+<script src="data/schedules.js"></script>
 <script src="assets/common.js"></script>
+<script src="assets/schedule.js"></script>
+<script src="assets/week.js"></script>
 <script>
 nav("p");
 let cur = new Date(); cur.setDate(1);
@@ -56,7 +74,7 @@ const whoSel = document.getElementById("who");
 const todayIso = () => iso(new Date());
 let selDay = todayIso();
 whoSel.insertAdjacentHTML("beforeend", PEOPLE.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join(""));
-whoSel.onchange = () => { render(); upcoming(); };
+whoSel.onchange = () => { render(); upcoming(); if (!document.getElementById("weekView").hidden) renderWeek(); };
 document.getElementById("people").innerHTML = PEOPLE.map(p => `<span><i style="background:${p.color}"></i>${esc(p.name.replace(/ \(.*\)/, ""))}</span>`).join("");
 const visible = e => !whoSel.value || !e.person || e.person.split(",").includes(whoSel.value);
 const personName = id => String(id || "").split(",").map(i => ((PEOPLE.find(p => p.id === i) || {}).name || i).replace(/ \(.*\)/, "")).join(", ");
@@ -130,6 +148,31 @@ function goMonth(n) {
   selDay = cur.getFullYear() === t.getFullYear() && cur.getMonth() === t.getMonth() ? todayIso() : iso(cur);
   render();
 }
+// Vue semaine : semaine type comparée à la réalité (assets/week.js).
+let weekStart = WeekView.mondayOf(todayIso());
+function renderWeek() {
+  const who = whoSel.value, sun = addDays(weekStart, 6), now = todayIso();
+  document.getElementById("wTitle").textContent = `Semaine du ${fmt(parse(weekStart))} au ${fmt(parse(sun))}${weekStart === WeekView.mondayOf(now) ? " (en cours)" : ""}`;
+  const r = WeekView.html(weekStart, events.filter(e => !who || !e.person || String(e.person).split(",").includes(who)), careByDay, { who, onlyDiff: document.getElementById("onlyDiff").checked });
+  document.getElementById("weekList").innerHTML = r.html;
+  const sum = document.getElementById("wSum");
+  sum.className = "wsum " + (r.diffs ? "bad" : "ok");
+  sum.textContent = r.diffs ? `${r.diffs} différence${r.diffs > 1 ? "s" : ""} par rapport à la semaine type` : "Semaine conforme à la semaine type";
+}
+function setView(v) {
+  document.getElementById("monthView").hidden = v !== "month"; document.getElementById("weekView").hidden = v !== "week";
+  document.getElementById("vMonth").setAttribute("aria-pressed", v === "month"); document.getElementById("vWeek").setAttribute("aria-pressed", v === "week");
+  try { sessionStorage.setItem("planning-view", v); } catch (e) {}
+  if (v === "week") renderWeek();
+}
+document.getElementById("vMonth").onclick = () => setView("month");
+document.getElementById("vWeek").onclick = () => setView("week");
+document.getElementById("wPrev").onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(); };
+document.getElementById("wNext").onclick = () => { weekStart = addDays(weekStart, 7); renderWeek(); };
+document.getElementById("wToday").onclick = () => { weekStart = WeekView.mondayOf(todayIso()); renderWeek(); };
+document.getElementById("onlyDiff").onchange = renderWeek;
+document.getElementById("toWeek").onclick = () => { weekStart = WeekView.mondayOf(selDay); setView("week"); window.scrollTo({ top: 0 }); };
+
 document.getElementById("prev").onclick = () => goMonth(-1);
 document.getElementById("next").onclick = () => goMonth(1);
 document.getElementById("today").onclick = () => { cur = new Date(); cur.setDate(1); selDay = todayIso(); render(); };
@@ -137,6 +180,7 @@ const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.data
 document.getElementById("grid").addEventListener("click", pick);
 document.getElementById("grid").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
 render(); upcoming();
+try { if (sessionStorage.getItem("planning-view") === "week") setView("week"); } catch (e) {}
 </script>
 </body>
 </html>

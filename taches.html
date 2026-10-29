@@ -13,35 +13,41 @@
 <header><h1>Tâches familiales</h1></header>
 <main>
   <section class="card">
-    <form class="add" id="f">
-      <input id="title" placeholder="Nouvelle tâche…" required>
-      <select id="who"></select>
-      <select id="cat"><option>Garde</option><option>École</option><option>Administratif</option><option>Santé</option><option>Activités</option><option>Vacances</option><option>Sorties</option><option>Maison</option><option>Autre</option></select>
-      <input id="due" type="date">
-      <button class="primary">Ajouter</button>
-    </form>
+    <div class="bar"><h2>À faire</h2><span class="late" id="lateCount"></span><select id="filter" aria-label="Filtrer par personne"><option value="">Toutes les personnes</option></select><label class="check muted"><input type="checkbox" id="showDone"> voir les terminées</label></div>
+    <ul class="list" id="list"></ul>
+    <details class="add-box">
+      <summary><b>+ Nouvelle tâche</b></summary>
+      <form class="add" id="f">
+        <input id="title" placeholder="Nouvelle tâche…" aria-label="Titre de la tâche" required>
+        <select id="who" aria-label="Responsable"></select>
+        <select id="cat" aria-label="Catégorie"><option>Garde</option><option>École</option><option>Administratif</option><option>Santé</option><option>Activités</option><option>Vacances</option><option>Sorties</option><option>Maison</option><option>Autre</option></select>
+        <input id="due" type="date" aria-label="Échéance">
+        <input id="time" type="time" aria-label="Heure (facultatif)">
+        <button class="primary">Ajouter</button>
+      </form>
+    </details>
   </section>
   <section class="card" id="sugg" hidden>
-    <h2 style="margin-top:0;font-size:1.1rem">Suggestions d'après le calendrier</h2>
-    <ul class="list" id="suggList"></ul>
+    <details open>
+      <summary><b>Suggestions d'après le calendrier</b> <span class="muted" id="suggCount"></span></summary>
+      <ul class="list" id="suggList"></ul>
+      <p class="muted">« Écarter » = ne pas le faire (ou déjà réglé) : la suggestion ne revient plus.</p>
+    </details>
   </section>
   <section class="card" id="out" hidden>
-    <h2 style="margin-top:0;font-size:1.1rem">Sorties avec Émilie</h2>
-    <p class="muted" style="margin-top:0">Moments où Adrian et Alixia sont absents (chez l'autre parent) ou occupés (stage ou garde organisée). En semaine hors congés, ils sont à l'école : les journées sont libres.</p>
-    <ul class="list" id="outList"></ul>
-  </section>
-  <section class="card">
-    <div class="bar"><h2>À faire</h2><select id="filter"><option value="">Toutes les personnes</option></select><label class="muted"><input type="checkbox" id="showDone"> voir les terminées</label></div>
-    <ul class="list" id="list"></ul>
-    <p class="muted">Les tâches sont enregistrées dans ce navigateur (par appareil).</p>
+    <details>
+      <summary><b>Sorties avec Émilie</b> <span class="muted" id="outCount"></span></summary>
+      <p class="muted">Quand Adrian et Alixia sont chez l'autre parent (ou occupés par un stage ou une garde organisée), avec l'heure à partir de laquelle vous êtes libres le soir (activités d'Émilie, retour de Bruxelles, piscine et récupération de Louanne pris en compte).</p>
+      <ul class="list" id="outList"></ul>
+    </details>
   </section>
   <section class="card">
     <details id="syncBox">
       <summary><b>Synchronisation entre appareils</b> <span class="muted" id="syncState"></span></summary>
-      <p class="muted">Les tâches sont partagées via un projet Supabase, configuré dans data/sync-config.js (voir le README). Les champs ci-dessous ne servent qu'à utiliser un autre projet sur cet appareil.</p>
+      <p class="muted">Les tâches sont partagées via un projet Supabase, configuré dans data/sync-config.js (voir le README). Les champs ci-dessous ne servent qu'à utiliser un autre projet sur cet appareil ; « Désactiver » coupe la synchronisation sur cet appareil.</p>
       <form class="add" id="syncForm">
-        <input id="syncUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
-        <input id="syncKey" placeholder="Clé « anon public »" type="password" autocomplete="off">
+        <input id="syncUrl" placeholder="https://xxxx.supabase.co" aria-label="Adresse du projet Supabase" autocomplete="off">
+        <input id="syncKey" placeholder="Clé « anon public »" aria-label="Clé publique Supabase" type="password" autocomplete="off">
         <button class="primary">Enregistrer</button>
         <button type="button" id="syncOff">Désactiver</button>
       </form>
@@ -55,6 +61,7 @@
 <script src="data/custody.js"></script>
 <script src="data/childcare.js"></script>
 <script src="data/school-events.js"></script>
+<script src="data/schedules.js"></script>
 <script src="data/recurring-tasks.js"></script>
 <script src="data/calendar.js"></script>
 <script src="data/calendar-filters.js"></script>
@@ -65,136 +72,172 @@
 nav("t");
 const KEY = "family-tasks-v1";
 let tasks = [];
-try { tasks = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) {}
+try { const v = JSON.parse(localStorage.getItem(KEY) || "[]"); if (Array.isArray(v)) tasks = v.filter(t => t && typeof t === "object"); } catch (e) {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch (e) {} };
-const people = [{ id: "famille", name: "Famille" }, ...window.PEOPLE];
-const opts = people.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+const people = [{ id: "famille", name: "Famille" }, ...(window.PEOPLE || [])];
+const opts = people.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
 document.getElementById("who").innerHTML = opts;
 document.getElementById("filter").insertAdjacentHTML("beforeend", opts);
 const nameOf = id => (people.find(p => p.id === id) || {}).name || id;
+const nowMs = () => taskSync.now();
+const hash = s => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.codePointAt(0)) >>> 0; return h.toString(36); };
+const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+const hm = t => (t ? " à " + t.replace(":", " h ") : "");
 
-// Suggestions : à anticiper avant chaque période de vacances
+// Prochaine occurrence d'une tâche annuelle (modèle de data/recurring-tasks.js) encore à faire : { due, year } ou null.
+function nextOccurrence(r, today) {
+  const y0 = +today.slice(0, 4);
+  for (let y = y0; y <= y0 + 12; y++) {
+    if (r.every && (y - (r.from || 0)) % r.every !== 0) continue;
+    const start = iso(new Date(y, r.month - 1, r.day || 1)), end = r.day ? start : iso(new Date(y, r.month, 0));
+    if (end >= today) return { start, year: y, due: start < today ? today : start };
+  }
+  return null;
+}
+
+// Suggestions : planification autour des congés, tâches annuelles. Les suggestions de période portent `until` (fin de la période).
 function suggestions() {
   const today = iso(new Date());
-  const out = [];
+  const out = [], yearly = [];
+  const push = (arr, s) => arr.push({ ...s, due: s.due < today ? today : s.due });
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances" && h.end >= today).forEach(h => {
-    const weeks = h.name.includes("été") ? 10 : 4;
-    const due = iso(new Date(parse(h.start) - weeks * 7 * MS));
-    const label = h.name.replace(/ \(.*\)/, "");
-    [["Prévoir activités / stages : " + label, "Activités"]].forEach(([title, cat]) =>
-      out.push({ title, cat, who: "famille", due: due < today ? today : due }));
+    const weeks = h.name.includes("été") ? 10 : 4, label = h.name.replace(/ \(.*\)/, "");
+    push(out, { title: "Prévoir activités / stages : " + label, cat: "Activités", who: "famille", due: addDays(h.start, -weeks * 7), until: h.end });
   });
   childcareGaps().filter(g => g.end >= today).forEach(g => {
-    const due = iso(new Date(parse(g.start) - (g.holiday.includes("été") ? 56 : 28) * MS));
     const label = g.start === g.end ? fmt(parse(g.start)) : `du ${fmt(parse(g.start))} au ${fmt(parse(g.end))}`;
-    out.push({ title: `Planification de garde A² (Adrian et Alixia) ${label} (${g.holiday.replace(/ \(.*\)/, "")})`, cat: "Garde", who: "moi", due: due < today ? today : due, until: g.end });
+    push(out, { title: `Planification de garde A² (Adrian et Alixia) ${label} (${g.holiday.replace(/ \(.*\)/, "")})`, cat: "Garde", who: "moi", due: addDays(g.start, g.holiday.includes("été") ? -56 : -28), until: g.end });
   });
   // A² chez l'autre parent pendant un congé : partir en vacances avec Louanne, Lukas et Émilie, et prévoir Lana.
   awayPeriods().filter(a => a.end >= today).forEach(a => {
     const summer = a.holiday.includes("été"), label = `du ${fmt(parse(a.start))} au ${fmt(parse(a.end))} (${a.holiday.replace(/ \(.*\)/, "")})`;
-    const planDue = iso(new Date(parse(a.start) - (summer ? 16 : 8) * 7 * MS)), lanaDue = iso(new Date(parse(a.start) - (summer ? 8 : 4) * 7 * MS));
-    out.push({ title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie${a.louanne ? " — " + a.louanne : ""}`, cat: "Vacances", who: "famille", due: planDue < today ? today : planDue, until: a.end });
+    push(out, { title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie${a.louanne ? " — " + a.louanne : ""}`, cat: "Vacances", who: "famille", due: addDays(a.start, -(summer ? 16 : 8) * 7), until: a.end });
     if (!(window.HOUSE_EMPTY || []).some(h => h.start <= a.end && h.end >= a.start))
-      out.push({ title: `Garde de Lana si départ en vacances ${label}`, cat: "Garde", who: "lana", due: lanaDue < today ? today : lanaDue, until: a.end });
+      push(out, { title: `Garde de Lana si départ en vacances ${label}`, cat: "Garde", who: "lana", due: addDays(a.start, -(summer ? 8 : 4) * 7), until: a.end });
   });
-  (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today).forEach(a => {
-    const due = iso(new Date(parse(a.start) - 14 * MS));
-    out.push({ title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: due < today ? today : due, until: a.end });
-  });
-  // Tâches annuelles : prochaine occurrence du mois (le 1er, ou aujourd'hui si on y est déjà), visible 60 jours avant.
-  const now = new Date(), MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today).forEach(a =>
+    push(out, { title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: addDays(a.start, -14), until: a.end }));
+  // Tâches annuelles : visibles `lead` jours avant leur échéance (60 par défaut), jamais écartées par le plafond des autres suggestions.
   (window.RECURRING_TASKS || []).forEach(r => {
-    let year = now.getFullYear();
-    if (r.month - 1 < now.getMonth()) year++;
-    const start = iso(new Date(year, r.month - 1, 1)), due = start < today ? today : start;
-    if (parse(start) - parse(today) <= 60 * MS) out.push({ title: `${r.title} (${MONTHS[r.month - 1]} ${year})`, cat: r.cat, who: r.who, due });
+    const o = nextOccurrence(r, today);
+    if (!o || o.start > addDays(today, r.lead || 60)) return;
+    const when = r.day ? `${r.day} ${MONTHS[r.month - 1]}` : MONTHS[r.month - 1];
+    yearly.push({ title: `${r.title}${r.check ? " (à vérifier)" : ""} (${when} ${o.year})`, cat: r.cat, who: r.who, due: o.due, until: addDays(o.due, 60), recurring: true });
   });
-  return out.filter(s => !tasks.some(t => t.title === s.title)).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 16);
+  const known = new Set(tasks.map(t => t.title));
+  const keep = s => !known.has(s.title);
+  const byDue = (a, b) => a.due.localeCompare(b.due);
+  return [...yearly.filter(keep).sort(byDue), ...out.filter(keep).sort(byDue).slice(0, 16)].sort(byDue);
 }
 
-// Opportunités de sortie : A² absents (soirées + week-end libres) ou occupés (stage / garde organisée), sur 4 mois.
+// Opportunités de sortie : A² absents (heure de libération le soir pour chaque jour) ou occupés (stage / garde organisée), sur 4 mois.
 function outings() {
   const today = iso(new Date()), range = (a, b) => a === b ? fmt(parse(a)) : `du ${fmt(parse(a))} au ${fmt(parse(b))}`;
+  const clock = m => `${Math.floor(m / 60)} h${m % 60 ? " " + String(m % 60).padStart(2, "0") : ""}`;
+  const wd = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
   return outingWindows(today, 120).slice(0, 10).map(w => {
-    const weekend = [0, 6].some(dw => { for (let k = w.start; k <= w.end; k = addDays(k, 1)) if (parse(k).getDay() === dw) return true; });
-    return w.kind === "absents"
-      ? { text: `A² chez l'autre parent ${range(w.start, w.end)} : soirées libres${weekend ? ", week-end compris" : ""}`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² absents)`, due: w.start, until: w.end }
-      : { text: `A² occupés (${w.note || "garde organisée"}) ${range(w.start, w.end)} : journées libres`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² en ${w.note || "garde organisée"})`, due: w.start, until: w.end };
+    if (w.kind !== "absents") return { text: `A² occupés (${w.note || "garde organisée"}) ${range(w.start, w.end)} : journées libres`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² en ${w.note || "garde organisée"})`, due: w.start, until: w.end };
+    const parts = [];
+    for (let k = w.start; k <= w.end && parts.length < 9; k = addDays(k, 1)) {
+      const d = parse(k).getDay();
+      if (d === 6 || d === 0) { parts.push(`${wd[d]} libre`); continue; }
+      const t = eveningFreeFrom(d);
+      if (t <= 21 * 60 + 30) parts.push(`${wd[d]} dès ${clock(t)}`);
+    }
+    return { text: `A² chez l'autre parent ${range(w.start, w.end)} — soirs : ${parts.join(" · ") || "aucun soir libre"}`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² absents)`, due: w.start, until: w.end };
   }).filter(o => !tasks.some(t => t.title === o.title));
 }
 
-function add(t) { const n = { id: Date.now() + Math.random(), done: false, updated: Date.now(), ...t }; tasks.push(n); save(); render(); remotePush(n); }
+function add(t) {
+  const n = { id: t.key ? "s" + hash(t.key) : "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), done: false, ...t, updated: nowMs() };
+  delete n.key; delete n.recurring;
+  tasks = tasks.filter(x => String(x.id) !== String(n.id)); tasks.push(n); save(); render(); remotePush(n);
+}
 
 // Synchronisation (si configurée) : les erreurs réseau n'empêchent pas de travailler en local.
 const stateEl = document.getElementById("syncState");
-const setState = (txt, bad) => { stateEl.textContent = txt; stateEl.style.color = bad ? "#b42318" : ""; };
+const setState = (txt, bad) => { stateEl.textContent = txt; stateEl.style.color = bad ? "var(--diff)" : ""; };
 async function remotePush(t) { if (!taskSync.config()) return; try { await taskSync.push(t); setState("✓ synchronisé"); } catch (e) { setState("⚠ hors ligne : sera renvoyé à la prochaine synchronisation", true); } }
-async function remoteRemove(id) { taskSync.markDeleted(id); if (!taskSync.config()) return; try { await taskSync.remove(id); setState("✓ synchronisé"); } catch (e) { setState("⚠ hors ligne : suppression renvoyée plus tard", true); } }
+async function remoteRemove(ids) { ids = [].concat(ids); ids.forEach(i => taskSync.markDeleted(i)); if (!taskSync.config()) return; try { await taskSync.remove(ids); setState("✓ synchronisé"); } catch (e) { setState("⚠ hors ligne : suppression renvoyée plus tard", true); } }
 async function runSync() {
   if (!taskSync.config()) { setState("(désactivée)"); return; }
-  try { tasks = await taskSync.sync(tasks); save(); render(); setState("✓ synchronisé " + new Date().toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" })); }
-  catch (e) { setState("⚠ synchronisation impossible (" + e.message + ")", true); }
+  try {
+    const list = await taskSync.sync(tasks, () => tasks);
+    if (!list) return; // une synchronisation est déjà en cours
+    tasks = list; save(); render(); setState("✓ synchronisé " + new Date().toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" }));
+  } catch (e) { setState("⚠ synchronisation impossible (" + e.message + ")", true); }
 }
 
-// Tâches de planning (garde, vacances, Lana, sorties) liées à une période : supprimées une fois la période passée.
-// Les tâches annuelles (entretiens) n'ont pas de période et restent. Les anciennes tâches sans « until » sont datées
-// d'après leur titre (dernière date « 24 oct. ») en prenant la première occurrence à partir de l'échéance.
-const PLANNING_RE = /^(Planification de (garde|vacances)|Garde de A² chez Yves|Garde de Lana si départ|Trouver qui garde Lana|Sortie avec Émilie)/;
+// Nettoyage : les tâches de planning liées à une période (garde, vacances, Lana, sorties) et les suggestions écartées sont supprimées
+// une fois la période passée. Les tâches libres (et les entretiens) ne sont jamais supprimées automatiquement.
+// Anciennes tâches sans « until » : reconnues seulement si leur titre est exactement celui d'une suggestion de période.
+const GENERATED_RE = /^(Planification de (?:garde A² \(Adrian et Alixia\)|vacances)|Garde de Lana si départ en vacances|Trouver qui garde Lana du|Sortie avec Émilie) (?:du \S+ \d{1,2} \S+ au \S+ \d{1,2} \S+|\S+ \d{1,2} \S+)/;
 const MON_ABBR = { "janv.": 0, "févr.": 1, "mars": 2, "avr.": 3, "mai": 4, "juin": 5, "juil.": 6, "août": 7, "sept.": 8, "oct.": 9, "nov.": 10, "déc.": 11 };
 function periodEnd(t) {
   if (t.until) return t.until;
-  if (!PLANNING_RE.test(t.title || "")) return null;
+  if (!GENERATED_RE.test(t.title || "")) return null;
   const m = [...t.title.matchAll(/(\d{1,2}) (janv\.|févr\.|mars|avr\.|mai|juin|juil\.|août|sept\.|oct\.|nov\.|déc\.)(?![\p{L}])/gu)].pop();
   if (!m) return null;
-  const base = t.due || iso(new Date());
-  let y = +base.slice(0, 4), end = iso(new Date(y, MON_ABBR[m[2]], +m[1]));
+  const base = t.due || iso(new Date()), y = +base.slice(0, 4);
+  let end = iso(new Date(y, MON_ABBR[m[2]], +m[1]));
   if (end < base) end = iso(new Date(y + 1, MON_ABBR[m[2]], +m[1]));
   return end;
 }
 function purgePast() {
-  const today = iso(new Date()), gone = tasks.filter(t => { const e = periodEnd(t); return e && e < today; });
+  const today = iso(new Date()), gone = tasks.filter(t => { const e = periodEnd(t); return e && e < today && (t.until ? t.auto !== false : true); });
   if (!gone.length) return;
   tasks = tasks.filter(t => !gone.includes(t)); save();
-  gone.forEach(t => remoteRemove(t.id));
+  remoteRemove(gone.map(t => t.id));
 }
 
+const byDue = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.time || "").localeCompare(b.time || "");
 function render() {
   purgePast();
   const f = document.getElementById("filter").value, sd = document.getElementById("showDone").checked, today = iso(new Date());
-  const rows = tasks.filter(t => (!f || t.who === f) && (sd || !t.done))
-    .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+  const mine = tasks.filter(t => !t.dismissed && (!f || t.who === f));
+  const rows = [...mine.filter(t => !t.done).sort(byDue), ...(sd ? mine.filter(t => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)) : [])];
+  const late = mine.filter(t => !t.done && t.due && t.due < today).length;
+  document.getElementById("lateCount").textContent = late ? `⚠ ${late} en retard` : "";
+  const empty = mine.length ? "Tout est fait ✓" : "Aucune tâche.";
   document.getElementById("list").innerHTML = rows.length ? rows.map(t => `
-    <li class="item task ${t.done ? "done" : ""}"><input type="checkbox" data-id="${t.id}" ${t.done ? "checked" : ""} aria-label="Terminée">
+    <li class="item task ${t.done ? "done" : ""}"><input type="checkbox" data-id="${esc(t.id)}" ${t.done ? "checked" : ""} aria-label="Terminée">
     <span class="t">${esc(t.title)}</span><span class="meta"><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
-    <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? fmt(parse(t.due)) : ""}</span></span>
-    <button data-del="${t.id}" title="Supprimer" aria-label="Supprimer">✕</button></li>`).join("") : `<li class="muted">Aucune tâche.</li>`;
+    <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? esc(fmt(parse(t.due)) + hm(t.time)) : ""}</span>${t.due && !t.done ? `<button class="mini" data-snooze="${esc(t.id)}" title="Reporter d'une semaine">+1 sem.</button>` : ""}</span>
+    <button data-del="${esc(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button></li>`).join("") : `<li class="muted">${empty}</li>`;
   const s = suggestions();
   document.getElementById("sugg").hidden = !s.length;
-  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${fmt(parse(x.due))}</span></span><button data-s="${i}">Ajouter</button></li>`).join("");
+  document.getElementById("suggCount").textContent = s.length ? `(${s.length})` : "";
+  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${esc(fmt(parse(x.due)))}</span></span><span class="acts"><button data-s="${i}">Ajouter</button><button class="mini" data-x="${i}" title="Écarter : ne pas le faire ou déjà réglé">Écarter</button></span></li>`).join("");
   window._s = s;
   const o = outings();
   document.getElementById("out").hidden = !o.length;
+  document.getElementById("outCount").textContent = o.length ? `(${o.length})` : "";
   document.getElementById("outList").innerHTML = o.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.text)}</span><span class="meta">${catTag("Sorties")}</span><button data-o="${i}">Ajouter</button></li>`).join("");
   window._o = o;
 }
 
 document.getElementById("f").onsubmit = e => {
   e.preventDefault();
-  add({ title: title.value.trim(), who: who.value, cat: cat.value, due: due.value });
+  const v = document.getElementById("title").value.trim();
+  if (!v) return;
+  add({ title: v, who: document.getElementById("who").value, cat: document.getElementById("cat").value, due: document.getElementById("due").value, time: document.getElementById("time").value || undefined });
   e.target.reset();
 };
 document.addEventListener("click", e => {
-  const d = e.target.dataset;
-  if (d.del) { tasks = tasks.filter(t => String(t.id) !== d.del); save(); render(); remoteRemove(d.del); }
-  if (d.s) add(window._s[d.s]);
-  if (d.o) { const o = window._o[d.o]; add({ title: o.title, who: "moi", cat: "Sorties", due: o.due, until: o.until }); }
+  const d = (e.target.closest("button") || {}).dataset;
+  if (!d) return;
+  if (d.del) { const id = d.del; tasks = tasks.filter(t => String(t.id) !== id); save(); render(); remoteRemove(id); }
+  if (d.snooze) { const t = tasks.find(t => String(t.id) === d.snooze); if (t) { t.due = addDays(t.due > iso(new Date()) ? t.due : iso(new Date()), 7); t.updated = nowMs(); save(); render(); remotePush(t); } }
+  if (d.s) { const x = window._s[d.s]; if (x) add({ ...x, key: x.title }); }
+  if (d.x) { const x = window._s[d.x]; if (x) add({ ...x, key: x.title, dismissed: true, done: true }); }
+  if (d.o) { const o = window._o[d.o]; if (o) add({ title: o.title, who: "moi", cat: "Sorties", due: o.due, until: o.until, key: o.title }); }
 });
 document.addEventListener("change", e => {
-  if (e.target.dataset.id) { const t = tasks.find(t => String(t.id) === e.target.dataset.id); t.done = e.target.checked; t.updated = Date.now(); save(); render(); remotePush(t); }
+  if (e.target.dataset.id) { const t = tasks.find(t => String(t.id) === e.target.dataset.id); if (!t) return; t.done = e.target.checked; t.doneAt = t.done ? nowMs() : undefined; t.updated = nowMs(); save(); render(); remotePush(t); }
   else if (e.target.id === "filter" || e.target.id === "showDone") render();
 });
 document.getElementById("syncForm").onsubmit = e => { e.preventDefault(); taskSync.setConfig(syncUrl.value, syncKey.value); syncKey.value = ""; runSync(); };
-document.getElementById("syncOff").onclick = () => { taskSync.clearConfig(); setState("(désactivée)"); };
+document.getElementById("syncOff").onclick = () => { taskSync.disable(); syncUrl.value = ""; setState("(désactivée)"); };
 const cfg = taskSync.config(); if (cfg) syncUrl.value = cfg.url;
 render();
 runSync();

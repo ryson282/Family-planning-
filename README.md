@@ -16,6 +16,7 @@ Ne jamais mettre ces adresses dans le code. Ce dépôt doit rester **privé** (`
 ## Données à compléter à la main
 - `data/custody.js` : planning de garde
 - `data/school-events.js` : événements scolaires (réunions de parents, examens ULiège...)
+- `data/recurring-tasks.js` : tâches qui reviennent (entretiens, impôts, dentiste, pneus…), proposées dans les suggestions avant leur échéance (`month`, `day`, `lead`, `every`, `check`)
 - `data/school-holidays.js` : vacances FWB 2026-2027 (à confirmer sur enseignement.be)
 - `data/schedules.js` : horaires habituels (travail, école, garderie, activités, trajets) de chaque membre de la famille ; alimente la page **Semaine type** (`semaine.html`)
 
@@ -61,3 +62,8 @@ Sans les secrets, le workflow ne fait rien.
 
 ### Installer sur l'écran d'accueil (Android)
 Le site fournit un manifeste (`manifest.webmanifest`) et une icône : dans Chrome, menu ⋮ → « Ajouter à l'écran d'accueil » (ou « Installer l'application ») ouvre le site en plein écran. Pas de mode hors ligne : les données sont toujours celles de la dernière publication.
+
+## Contrôle des données et publication
+- `node scripts/check-data.mjs` contrôle tous les fichiers `data/*.js` (syntaxe, personnes connues, dates valides, fin >= début, jour d'ancrage de la garde, horaires) et fait tourner la logique du site dessus (semaine type avec/sans A², vue semaine, garde). Il tourne à chaque pull request (workflow « Contrôle des données ») et **avant chaque publication** : une erreur bloque le déploiement. Il avertit aussi quand les événements scolaires ou le calendrier des congés arrivent à expiration (préparer l'année suivante).
+- Les synchronisations (agendas toutes les 3 h, congés chaque mois) ne publient le site que si quelque chose a changé, ne se chevauchent pas, et gardent l'ancien contenu d'un agenda qui échoue ou répond vide. Les heures des événements sont celles de Bruxelles.
+- Page Tâches : « Écarter » une suggestion (déjà réglé, on ne le fait pas) la fait disparaître pour tous les appareils ; « +1 sem. » reporte une échéance ; un titre peut avoir une heure (rendez-vous).

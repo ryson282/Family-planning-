@@ -7,23 +7,45 @@ on:
 
 permissions:
   contents: write
+  actions: write # pour relancer la publication quand quelque chose a changé
+
+# une seule synchronisation de données à la fois (agendas et congés) : pas de push concurrents
+concurrency:
+  group: data-sync
+  cancel-in-progress: false
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    env:
+      TZ: Europe/Brussels # les heures des événements sont celles de Bruxelles
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install --no-save --no-package-lock ical.js@2.1.0
+      - run: npm install --no-save --no-package-lock --ignore-scripts ical.js@2.1.0
       - name: Télécharger les agendas
         env:
           ICS_URLS: ${{ secrets.ICS_URLS }}
         run: node scripts/fetch-calendar.mjs
       - name: Enregistrer si modifié
+        id: commit
         run: |
           git config user.name "calendar-sync"
           git config user.email "calendar-sync@users.noreply.github.com"
           git add data/calendar.js
-          git diff --cached --quiet || (git commit -m "Mise à jour des agendas" && git push)
+          if git diff --cached --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git commit -m "Mise à jour des agendas"
+          ok=0
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push; then ok=1; break; fi
+            sleep 5
+          done
+          [ "$ok" = 1 ] || { echo "::error::Impossible de pousser la mise à jour des agendas."; exit 1; }
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Republier le site
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-cloudflare.yml --ref main

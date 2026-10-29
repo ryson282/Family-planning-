@@ -39,11 +39,13 @@ export function parse(html) {
     for (const [re, name] of KINDS) {
       const m = body.match(new RegExp(`${re.source}(?: \\([^)]*\\))? Du ${DATE} au ${DATE}`, "iu"));
       if (!m) continue;
-      let start = iso(m[1], m[2], m[3]); const end = iso(m[4], m[5], m[6]);
-      if (start > end) { // faute de saisie constatée sur le site (ex. « 25 décembre 2029 au 7 janvier 2029 »)
-        warnings.push(`${name} : « ${m[0]} » incohérent, année de début corrigée`);
-        start = `${Number(start.slice(0, 4)) - 1}${start.slice(4)}`;
-      }
+      let start = iso(m[1], m[2], m[3]), end = iso(m[4], m[5], m[6]);
+      if (name.includes("hiver")) {
+        // Noël : décembre de l'année de la rentrée, janvier de l'année suivante (le site a déjà écrit « 25 décembre 2029 au 7 janvier 2029 »).
+        const y = Number(year.rentree.slice(0, 4)), fixed = { start: `${y}${start.slice(4)}`, end: `${y + 1}${end.slice(4)}` };
+        if (start !== fixed.start || end !== fixed.end) warnings.push(`${name} : « ${m[0]} » incohérent avec la rentrée du ${year.rentree}, dates corrigées`);
+        ({ start, end } = fixed);
+      } else if (start > end) { warnings.push(`${name} : « ${m[0]} » incohérent, ignoré`); continue; }
       year.vacances.push({ name, start, end });
     }
     const ete = body.match(new RegExp(`vacances d'[ée]t[ée] d[ée]butent le ${DATE}`, "iu"));
@@ -80,8 +82,10 @@ async function main() {
   warnings.forEach(w => console.log("Attention :", w));
   console.log(`${years.length} année(s) scolaire(s) trouvée(s) : ${years.map(y => y.rentree).join(", ")}`);
   const incomplete = years.filter(y => y.vacances.length < 4 || !y.ete);
-  if (!years.length || incomplete.length) throw new Error(`Page enseignement.be non reconnue ou incomplète (${incomplete.map(y => y.rentree).join(", ") || "aucune année"}) : données non écrites.`);
-  const holidays = build(years);
+  incomplete.forEach(y => console.log(`::warning::Année scolaire de la rentrée ${y.rentree} incomplète sur enseignement.be : ignorée.`));
+  const valid = years.filter(y => !incomplete.includes(y));
+  if (!valid.length) throw new Error("Page enseignement.be non reconnue ou incomplète : aucune année exploitable, données non écrites.");
+  const holidays = build(valid);
   const js = `// Généré par scripts/fetch-holidays.mjs (source : www.enseignement.be, enseignement obligatoire). Ne pas modifier à la main.\n` +
     `// Complète data/school-holidays.js pour les périodes postérieures à sa dernière entrée.\n` +
     `window.SCHOOL_HOLIDAYS_AUTO = ${JSON.stringify(holidays, null, 1).replace(/\n\s*/g, " ").replace(/\[ /, "[\n  ").replace(/}, \{/g, "},\n  {").replace(/ \]$/, "\n]")};\n`;

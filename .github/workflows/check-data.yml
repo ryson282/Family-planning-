@@ -18,3 +18,9 @@ jobs:
         with:
           node-version: 20
       - run: node scripts/check-data.mjs
+      - name: Flux iCal (génération à blanc, sans réseau)
+        env:
+          FEED_TOKEN: ci-check-0123456789
+          SYNC_URL: http://127.0.0.1:9
+          SYNC_KEY: x
+        run: node scripts/build-feed.mjs "$RUNNER_TEMP/feed"

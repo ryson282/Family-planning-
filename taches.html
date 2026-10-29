@@ -68,12 +68,13 @@
 <script src="assets/common.js"></script>
 <script src="data/sync-config.js"></script>
 <script src="assets/tasks-sync.js"></script>
+<script src="assets/records.js"></script>
 <script>
 nav("t");
 const KEY = "family-tasks-v1";
-let tasks = [];
-try { const v = JSON.parse(localStorage.getItem(KEY) || "[]"); if (Array.isArray(v)) tasks = v.filter(t => t && typeof t === "object"); } catch (e) {}
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch (e) {} };
+let tasks = Records.local(); // tâches ET enregistrements partagés (kind : exceptions de garde, solutions de garde, décisions de vacances, échéances du foyer)
+Records.apply(tasks);
+const save = () => { Records.saveLocal(tasks); Records.apply(tasks); };
 const people = [{ id: "famille", name: "Famille" }, ...(window.PEOPLE || [])];
 const opts = people.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
 document.getElementById("who").innerHTML = opts;
@@ -81,19 +82,7 @@ document.getElementById("filter").insertAdjacentHTML("beforeend", opts);
 const nameOf = id => (people.find(p => p.id === id) || {}).name || id;
 const nowMs = () => taskSync.now();
 const hash = s => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.codePointAt(0)) >>> 0; return h.toString(36); };
-const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 const hm = t => (t ? " à " + t.replace(":", " h ") : "");
-
-// Prochaine occurrence d'une tâche annuelle (modèle de data/recurring-tasks.js) encore à faire : { due, year } ou null.
-function nextOccurrence(r, today) {
-  const y0 = +today.slice(0, 4);
-  for (let y = y0; y <= y0 + 12; y++) {
-    if (r.every && (y - (r.from || 0)) % r.every !== 0) continue;
-    const start = iso(new Date(y, r.month - 1, r.day || 1)), end = r.day ? start : iso(new Date(y, r.month, 0));
-    if (end >= today) return { start, year: y, due: start < today ? today : start };
-  }
-  return null;
-}
 
 // Suggestions : planification autour des congés, tâches annuelles. Les suggestions de période portent `until` (fin de la période).
 function suggestions() {
@@ -117,14 +106,9 @@ function suggestions() {
   });
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today).forEach(a =>
     push(out, { title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: addDays(a.start, -14), until: a.end }));
-  // Tâches annuelles : visibles `lead` jours avant leur échéance (60 par défaut), jamais écartées par le plafond des autres suggestions.
-  (window.RECURRING_TASKS || []).forEach(r => {
-    const o = nextOccurrence(r, today);
-    if (!o || o.start > addDays(today, r.lead || 60)) return;
-    const when = r.day ? `${r.day} ${MONTHS[r.month - 1]}` : MONTHS[r.month - 1];
-    yearly.push({ title: `${r.title}${r.check ? " (à vérifier)" : ""} (${when} ${o.year})`, cat: r.cat, who: r.who, due: o.due, until: addDays(o.due, 60), recurring: true });
-  });
-  const known = new Set(tasks.map(t => t.title));
+  // Tâches annuelles et échéances du foyer : visibles `lead` jours avant leur échéance (60 par défaut), jamais écartées par le plafond des autres suggestions.
+  annualTasks(today).forEach(t => yearly.push(t));
+  const known = new Set(tasks.filter(t => !t.kind).map(t => t.title));
   const keep = s => !known.has(s.title);
   const byDue = (a, b) => a.due.localeCompare(b.due);
   return [...yearly.filter(keep).sort(byDue), ...out.filter(keep).sort(byDue).slice(0, 16)].sort(byDue);
@@ -149,8 +133,8 @@ function outings() {
 }
 
 function add(t) {
-  const n = { id: t.key ? "s" + hash(t.key) : "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), done: false, ...t, updated: nowMs() };
-  delete n.key; delete n.recurring;
+  const { key, recurring, start, lead, deadline, record, ...rest } = t;
+  const n = { id: key ? "s" + hash(key) : "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), done: false, ...rest, updated: nowMs() };
   tasks = tasks.filter(x => String(x.id) !== String(n.id)); tasks.push(n); save(); render(); remotePush(n);
 }
 
@@ -194,20 +178,20 @@ const byDue = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.t
 function render() {
   purgePast();
   const f = document.getElementById("filter").value, sd = document.getElementById("showDone").checked, today = iso(new Date());
-  const mine = tasks.filter(t => !t.dismissed && (!f || t.who === f));
+  const mine = tasks.filter(t => !t.kind && !t.dismissed && (!f || t.who === f));
   const rows = [...mine.filter(t => !t.done).sort(byDue), ...(sd ? mine.filter(t => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)) : [])];
   const late = mine.filter(t => !t.done && t.due && t.due < today).length;
   document.getElementById("lateCount").textContent = late ? `⚠ ${late} en retard` : "";
   const empty = mine.length ? "Tout est fait ✓" : "Aucune tâche.";
   document.getElementById("list").innerHTML = rows.length ? rows.map(t => `
     <li class="item task ${t.done ? "done" : ""}"><input type="checkbox" data-id="${esc(t.id)}" ${t.done ? "checked" : ""} aria-label="Terminée">
-    <span class="t">${esc(t.title)}</span><span class="meta"><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
+    <span class="t">${esc(t.title)}${t.note ? `<small class="note">${esc(t.note)}</small>` : ""}</span><span class="meta"><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
     <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? esc(fmt(parse(t.due)) + hm(t.time)) : ""}</span>${t.due && !t.done ? `<button class="mini" data-snooze="${esc(t.id)}" title="Reporter d'une semaine">+1 sem.</button>` : ""}</span>
     <button data-del="${esc(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button></li>`).join("") : `<li class="muted">${empty}</li>`;
   const s = suggestions();
   document.getElementById("sugg").hidden = !s.length;
   document.getElementById("suggCount").textContent = s.length ? `(${s.length})` : "";
-  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${esc(fmt(parse(x.due)))}</span></span><span class="acts"><button data-s="${i}">Ajouter</button><button class="mini" data-x="${i}" title="Écarter : ne pas le faire ou déjà réglé">Écarter</button></span></li>`).join("");
+  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}${x.note ? `<small class="note">${esc(x.note)}</small>` : ""}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${esc(fmt(parse(x.due)))}</span></span><span class="acts"><button data-s="${i}">Ajouter</button><button class="mini" data-x="${i}" title="Écarter : ne pas le faire ou déjà réglé">Écarter</button></span></li>`).join("");
   window._s = s;
   const o = outings();
   document.getElementById("out").hidden = !o.length;

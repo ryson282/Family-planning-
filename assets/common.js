@@ -73,6 +73,8 @@ const custodyCovered = day => custodyPeriods().some(p => inRange(day, p.start, p
 // "moi" | "autre" | "echange" (jour de passage) | null (inconnu). Tout jour sans événement réel, à partir du premier
 // événement connu, est estimé par les règles (y compris les trous entre deux événements réels éloignés).
 function custodyOn(day) {
+  const ov = (window.CUSTODY_OVERRIDES || {})[day]; // exception saisie dans l'application (échange exceptionnel, changement de dernière minute)
+  if (ov) return ov;
   const who = new Set(custodyPeriods().filter(p => inRange(day, p.start, p.end)).map(p => p.who));
   if (who.size) return who.size > 1 ? "echange" : [...who][0];
   const first = custodyPeriods()[0];
@@ -80,6 +82,7 @@ function custodyOn(day) {
 }
 
 function custodyEstimated(day) {
+  if ((window.CUSTODY_OVERRIDES || {})[day]) return false;
   return custodyPeriods().length > 0 && !custodyCovered(day) && custodyOn(day) !== null;
 }
 
@@ -262,10 +265,61 @@ function isHidden(e) {
 }
 
 // Tous les événements ponctuels, normalisés : { date (début), end, title, source, person }
+// Prénom en début de titre d'un événement d'agenda (« Lukas : dentiste 15h45 », « Adrian, Alixia : photos », « Famille : ... ») :
+// il désigne les personnes concernées et est retiré du titre affiché.
+function personFromTitle(title) {
+  const m = /^\s*([^:]{2,40}?)\s*:\s*(.+)$/.exec(title || "");
+  if (!m) return null;
+  const plain = x => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const names = { yves: "moi", famille: "famille", "a²": "alixia,adrian", a2: "alixia,adrian" };
+  (window.PEOPLE || []).forEach(p => { names[plain(p.id)] = p.id; names[plain(p.name.replace(/ \(.*\)/, ""))] = p.id; });
+  const ids = m[1].split(/\s*(?:,|\+|&|\/| et )\s*/).map(plain).map(n => names[n]);
+  if (!ids.length || ids.some(i => !i)) return null;
+  return { person: [...new Set(ids.join(",").split(","))].filter(i => i !== "famille").join(","), title: m[2] };
+}
+
+// Tous les événements ponctuels, normalisés : { date (début), end, title, source, person, time, timeEnd }
 function allEvents() {
   const out = [];
-  (window.CALENDAR_EVENTS || []).filter(e => calendarAllows(e) && !isCustodyEvent(e) && !isHidden(e)).forEach(e => out.push({ date: e.start.slice(0, 10), end: (e.end || e.start).slice(0, 10), title: e.title, source: e.calendar, person: (window.CALENDAR_OWNERS || {})[e.calendar], time: e.allDay ? "" : e.start.slice(11, 16) }));
-  (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.end || e.date, title: e.title, source: "École", person: e.person }));
+  (window.CALENDAR_EVENTS || []).filter(e => calendarAllows(e) && !isCustodyEvent(e) && !isHidden(e)).forEach(e => {
+    const named = personFromTitle(e.title), end = (e.end || e.start);
+    out.push({ date: e.start.slice(0, 10), end: end.slice(0, 10), title: named ? named.title : e.title, source: e.calendar,
+      person: named ? named.person : (window.CALENDAR_OWNERS || {})[e.calendar], time: e.allDay ? "" : e.start.slice(11, 16),
+      timeEnd: !e.allDay && end.slice(0, 10) === e.start.slice(0, 10) ? end.slice(11, 16) : "" });
+  });
+  (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.end || e.date, title: e.title, source: "École", person: e.person, time: e.time || "", timeEnd: "", todo: e.todo, amount: e.amount, needsParent: e.needsParent, note: e.note }));
+  return out;
+}
+
+// Tâches annuelles (data/recurring-tasks.js) et échéances propres au foyer (enregistrements « deadline ») : prochaine occurrence encore à faire.
+// all = true : toutes, même hors de leur fenêtre d'anticipation (flux iCal). Sinon seulement celles à moins de `lead` jours.
+const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+function nextOccurrence(r, today) {
+  const y0 = +today.slice(0, 4);
+  for (let y = y0; y <= y0 + 12; y++) {
+    if (r.every && (y - (r.from || 0)) % r.every !== 0) continue;
+    const start = iso(new Date(y, r.month - 1, r.day || 1)), end = r.day ? start : iso(new Date(y, r.month, 0));
+    if (end >= today) return { start, year: y, due: start < today ? today : start };
+  }
+  return null;
+}
+function annualTasks(today, { all = false } = {}) {
+  const out = [];
+  (window.RECURRING_TASKS || []).forEach(r => {
+    const o = nextOccurrence(r, today), lead = r.lead || 60;
+    if (!o || (!all && o.start > addDays(today, lead))) return;
+    const when = r.day ? `${r.day} ${MONTHS_FR[r.month - 1]}` : MONTHS_FR[r.month - 1];
+    out.push({ title: `${r.title}${r.check ? " (à vérifier)" : ""} (${when} ${o.year})`, cat: r.cat, who: r.who, due: o.due, start: o.start, lead, until: addDays(o.due, 60), recurring: true, note: r.note });
+  });
+  (window.HOUSEHOLD_DEADLINES || []).forEach(d => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date || "")) return;
+    let date = d.date;
+    for (let i = 0; i < 40 && date < today && d.every; i++) date = iso(new Date(+date.slice(0, 4) + d.every, +date.slice(5, 7) - 1, +date.slice(8)));
+    if (date < today) return;
+    const lead = d.lead || 60;
+    if (!all && date > addDays(today, lead)) return;
+    out.push({ title: `${d.title} (${fmt(parse(date))} ${date.slice(0, 4)})`, cat: d.cat || "Administratif", who: d.who || "famille", due: date, start: date, lead, until: addDays(date, 60), recurring: true, note: d.note, deadline: d.id });
+  });
   return out;
 }
 
@@ -282,7 +336,15 @@ function personColor(id) {
   return p ? p.color : "var(--accent)";
 }
 
+// Nombre de tâches en retard (d'après la liste enregistrée sur cet appareil) : affiché sur l'onglet Tâches.
+function lateCount() {
+  try {
+    const t = iso(new Date());
+    return (JSON.parse(localStorage.getItem("family-tasks-v1") || "[]") || []).filter(x => x && !x.kind && !x.done && !x.dismissed && x.due && x.due < t).length;
+  } catch (e) { return 0; }
+}
 function nav(active) {
+  const n = lateCount(), link = (href, id, label) => `<a href="${href}" class="${active === id ? "on" : ""}">${label}</a>`;
   document.querySelector("header").insertAdjacentHTML("beforeend",
-    `<nav><a href="index.html" class="${active === "p" ? "on" : ""}">Planning</a><a href="semaine.html" class="${active === "s" ? "on" : ""}">Semaine type</a><a href="taches.html" class="${active === "t" ? "on" : ""}">Tâches</a></nav>`);
+    `<nav>${link("index.html", "p", "Planning")}${link("semaine.html", "s", "Semaine type")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}</span>` : ""}`)}</nav>`);
 }

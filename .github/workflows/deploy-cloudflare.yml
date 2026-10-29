@@ -3,11 +3,14 @@ name: Publier sur Cloudflare
 # Publie le site (pages + assets + data) sur Cloudflare Pages : à chaque fusion dans main, à la demande, et quand une synchronisation
 # des agendas ou des congés a modifié quelque chose (elles relancent ce workflow elles-mêmes : leurs commits, faits avec le jeton GitHub
 # par défaut, ne déclenchent pas « push »). Les données sont contrôlées avant publication : une erreur bloque la publication.
-# Secrets à créer dans GitHub (Settings > Secrets and variables > Actions) : CLOUDFLARE_API_TOKEN et CLOUDFLARE_ACCOUNT_ID.
+# Secrets à créer dans GitHub (Settings > Secrets and variables > Actions) : CLOUDFLARE_API_TOKEN et CLOUDFLARE_ACCOUNT_ID ;
+# facultatif : FEED_TOKEN (au moins 16 caractères, lettres/chiffres/-/_) pour publier le flux iCal des rappels à /ics/<jeton>/famille.ics.
 # Variable optionnelle CF_PAGES_PROJECT : nom du projet Pages (défaut : family-planning-ryson282).
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "20 4 * * *" # une publication par jour : le flux iCal (tâches en retard, alertes de garde) est recalculé
   workflow_dispatch:
 
 permissions:
@@ -48,6 +51,11 @@ jobs:
           mkdir dist
           cp index.html taches.html semaine.html manifest.webmanifest dist/
           cp -r assets data dist/
+      - name: Flux iCal des rappels (si le secret FEED_TOKEN existe)
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          FEED_TOKEN: ${{ secrets.FEED_TOKEN }}
+        run: node scripts/build-feed.mjs dist
       - name: Créer le projet Pages (ignoré s'il existe déjà)
         if: steps.cfg.outputs.ready == 'true'
         run: |

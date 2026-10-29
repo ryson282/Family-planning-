@@ -41,6 +41,7 @@
 <main>
   <section class="card">
     <div class="bar2">
+      <div class="seg" role="group" aria-label="Version de la semaine type"><button id="kidsOn" aria-pressed="true">Avec A²</button><button id="kidsOff" aria-pressed="false">Sans A²</button></div>
       <label>Vue <select id="mode"><option value="day">Par jour</option><option value="person">Par personne</option></select></label>
       <label id="pickDay">Jour <select id="day"></select></label>
       <label id="pickPerson" hidden>Personne <select id="person"></select></label>
@@ -67,12 +68,16 @@ const DAYS = [[1, "Lundi"], [2, "Mardi"], [3, "Mercredi"], [4, "Jeudi"], [5, "Ve
 const { M, T } = Sched;
 const nameOf = p => (PEOPLE.find(x => x.id === p) || {}).name || p;
 const shortName = p => nameOf(p).replace(/ \(.*\)/, "").replace("moi", "Yves");
-const eventsFor = (p, d) => Sched.eventsFor(p, d);
+// Deux versions : avec A² (Adrian et Alixia chez Yves) ou sans eux (chez l'autre parent).
+let withKids = true;
+const KIDS_IDS = ["adrian", "alixia"];
+const eventsFor = (p, d) => Sched.eventsFor(p, d, withKids);
+const orderNow = () => ORDER.filter(id => withKids || !KIDS_IDS.includes(id));
 
 const LO = 6 * 60, HI = 21.5 * 60, PX = 0.85, H = (HI - LO) * PX;
 function render() {
   const mode = document.getElementById("mode").value, d = +document.getElementById("day").value, p = document.getElementById("person").value;
-  const lanes = mode === "day" ? ORDER.filter(id => shown.p.has(id)).map(id => ({ title: shortName(id), color: personColor(id), events: eventsFor(id, d) }))
+  const lanes = mode === "day" ? orderNow().filter(id => shown.p.has(id)).map(id => ({ title: shortName(id), color: personColor(id), events: eventsFor(id, d) }))
     : DAYS.filter(([n]) => shown.d.has(n)).map(([n, name]) => ({ title: name, color: personColor(p), events: eventsFor(p, n) }));
   renderChips(mode, p);
   const tl = document.getElementById("tl");
@@ -91,7 +96,7 @@ function render() {
 // Pastilles pour choisir les colonnes affichées (personnes en vue « par jour », jours en vue « par personne »).
 const shown = { p: new Set(ORDER), d: new Set(DAYS.map(x => x[0])) };
 function renderChips(mode, person) {
-  const items = mode === "day" ? ORDER.map(id => [id, shortName(id), personColor(id), shown.p.has(id)]) : DAYS.map(([n, name]) => [n, name, personColor(person), shown.d.has(n)]);
+  const items = mode === "day" ? orderNow().map(id => [id, shortName(id), personColor(id), shown.p.has(id)]) : DAYS.map(([n, name]) => [n, name, personColor(person), shown.d.has(n)]);
   const box = document.getElementById("chips");
   box.innerHTML = items.map(([id, label, col, on]) => `<button type="button" class="chip" style="--pc:${col}" aria-pressed="${on}" data-k="${id}"><i></i>${esc(label)}</button>`).join("");
   box.querySelectorAll(".chip").forEach(b => b.onclick = () => {
@@ -103,12 +108,16 @@ function renderChips(mode, person) {
 
 // Points de vigilance déduits des horaires.
 function alerts() {
-  const out = [], close = M(S.alixia.childcare.closes), o = S.moi.work.office;
-  out.push(`<span class="warn">Mardi :</span> retour à Waremme à ${T(M(o.backAtWaremme))}, garderie fermée à ${T(close)} : marge de ${close - M(o.backAtWaremme)} min (Alixia et Adrian).`);
-  const pool = S.lukas.activities[0];
-  out.push(`<span class="warn">Vendredi :</span> piscine de Lukas ${T(M(pool.blocked[0]))} à ${T(M(pool.blocked[1]))} (temps scolaire), puis garderie avant ${T(close)} : marge de ${close - M(pool.blocked[1])} min.`);
-  const r = S.routines[0];
-  out.push(`<span class="warn">Lundi soir :</span> ${r.steps.join(" → ")}. Créneau estimé de ${T(M(r.estimated[0]))} à ${T(M(r.estimated[1]))} ; solfège de Louanne à ${T(M(S.louanne.activities[0].start))}.`);
+  const out = [], close = M(S.alixia.childcare.closes), o = S.moi.work.office, r = S.routines[0];
+  if (withKids) {
+    out.push(`<span class="warn">Mardi :</span> retour à Waremme à ${T(M(o.backAtWaremme))}, garderie fermée à ${T(close)} : marge de ${close - M(o.backAtWaremme)} min (Alixia et Adrian).`);
+    const pool = S.lukas.activities[0];
+    out.push(`<span class="warn">Vendredi :</span> piscine de Lukas ${T(M(pool.blocked[0]))} à ${T(M(pool.blocked[1]))} (temps scolaire), puis garderie avant ${T(close)} : marge de ${close - M(pool.blocked[1])} min.`);
+    out.push(`<span class="warn">Lundi soir :</span> ${r.steps.join(" → ")}. Créneau estimé de ${T(M(r.estimated[0]))} à ${T(M(r.estimated[1]))} ; solfège de Louanne à ${T(M(S.louanne.activities[0].start))}.`);
+  } else {
+    out.push(`<span class="warn">Sans A² :</span> pas de garderie à récupérer (mardi, vendredi), Adrian et Alixia n'apparaissent pas.`);
+    out.push(`<span class="warn">Lundi soir :</span> Yves va seul chercher Louanne à Liège (18 h) ; solfège à ${T(M(S.louanne.activities[0].start))}. Créneau estimé de ${T(M(r.estimated[0]))} à ${T(M(r.estimated[1]))}.`);
+  }
   const cars = {};
   const useCar = (name, label, day) => { (cars[name] = cars[name] || []).push([day, label]); };
   useCar(S.louanne.commute.pickup.car, `lundi vers ${T(M(r.estimated[0]))} (Louanne à Liège)`, 1);
@@ -126,7 +135,19 @@ function alerts() {
 }
 
 document.getElementById("day").innerHTML = DAYS.map(([n, name]) => `<option value="${n}">${name}</option>`).join("");
-document.getElementById("person").innerHTML = ORDER.map(id => `<option value="${id}">${esc(shortName(id))}</option>`).join("");
+function fillPersons() {
+  const sel = document.getElementById("person"), cur = sel.value;
+  sel.innerHTML = orderNow().map(id => `<option value="${id}">${esc(shortName(id))}</option>`).join("");
+  if (orderNow().includes(cur)) sel.value = cur;
+}
+fillPersons();
+function setKids(on) {
+  withKids = on; fillPersons();
+  document.getElementById("kidsOn").setAttribute("aria-pressed", on); document.getElementById("kidsOff").setAttribute("aria-pressed", !on);
+  render(); alerts();
+}
+document.getElementById("kidsOn").onclick = () => setKids(true);
+document.getElementById("kidsOff").onclick = () => setKids(false);
 const wd = new Date().getDay(); document.getElementById("day").value = String(wd >= 1 && wd <= 5 ? wd : 1);
 document.getElementById("mode").onchange = e => { document.getElementById("pickDay").hidden = e.target.value !== "day"; document.getElementById("pickPerson").hidden = e.target.value !== "person"; render(); };
 document.getElementById("day").onchange = document.getElementById("person").onchange = render;

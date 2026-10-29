@@ -10,14 +10,14 @@ const WeekView = (() => {
 
   // Statut d'un événement de la semaine type pour un jour donné : same | removed | changed.
   function judge(e, id, ctx) {
-    const dep = e.dep || "", { congesOf, noClass, kidsAway, kidsOff } = ctx;
+    const dep = e.dep || "", { congesOf, noClass, kidsOff, withKids } = ctx;
     const off = who => congesOf(who);
     if (dep === "school" || dep.startsWith("school:")) { const c = off(dep === "school" ? id : dep.slice(7)); if (c) return { status: "removed", why: c.name }; }
     else if (dep === "uni") { const c = off("louanne"); if (c) return { status: "removed", why: c.name }; if (noClass) return { status: "removed", why: noClass.title.replace(/^ULiège : /, "") }; }
-    else if (dep === "kidcare") { if (kidsAway) return { status: "removed", why: "enfants chez l'autre parent" }; if (kidsOff) return { status: "removed", why: kidsOff.name }; }
+    else if (dep === "kidcare") { if (kidsOff) return { status: "removed", why: kidsOff.name }; }
     else if (dep === "routine1") {
       const c = off("louanne"); if (c || noClass) return { status: "removed", why: c ? c.name : noClass.title.replace(/^ULiège : /, "") };
-      if (kidsAway || kidsOff) return { status: "changed", label: "Liège : chercher Louanne (18 h), sans la garderie", why: kidsAway ? "enfants chez l'autre parent" : kidsOff.name };
+      if (withKids && kidsOff) return { status: "changed", label: "Liège : chercher Louanne (18 h), sans la garderie", why: kidsOff.name };
     }
     return { status: "same", why: "" };
   }
@@ -28,9 +28,10 @@ const WeekView = (() => {
     for (let i = 0; i < 7; i++) {
       const k = addDays(monday, i), typeDay = i < 5 ? i + 1 : 0, conges = congesOn(k), custody = custodyOn(k);
       const congesOf = who => conges.find(c => c.persons.includes(who));
-      const ctx = { congesOf, noClass: noClassOn(k), kidsAway: custody === "autre", kidsOff: congesOf("alixia") };
+      // Jour où A² est chez l'autre parent : on compare à la semaine type SANS A², et Adrian et Alixia n'apparaissent pas.
+      const withKids = custody !== "autre", ctx = { congesOf, noClass: noClassOn(k), kidsOff: congesOf("alixia"), withKids };
       const rows = Object.fromEntries(ORDER.map(id => [id, []]));
-      if (typeDay) ORDER.forEach(id => Sched.eventsFor(id, typeDay).forEach(e => {
+      if (typeDay) ORDER.forEach(id => Sched.eventsFor(id, typeDay, withKids).forEach(e => {
         const j = judge(e, id, ctx);
         rows[id].push({ a: e.a, b: e.b, label: j.label || e.label, status: j.status, why: j.why });
       }));
@@ -39,7 +40,7 @@ const WeekView = (() => {
       if (careByDay[k]) rows.moi.push({ label: "Garde A² en congé : " + (careByDay[k].solution || "à organiser"), status: "added" });
       events.filter(e => inRange(k, e.date, e.end) && !CONGE_EVENT.test(e.title)).forEach(e =>
         (e.person ? String(e.person).split(",") : ["famille"]).forEach(id => rows[rows[id] ? id : "famille"].push({ a: e.time ? Sched.M(e.time) : undefined, label: e.title, status: "added" })));
-      const list = ORDER.map(id => ({ id, items: rows[id].sort((x, y) => (x.status === "added") - (y.status === "added") || (x.a ?? 9999) - (y.a ?? 9999)) })).filter(r => r.items.length);
+      const list = ORDER.filter(id => withKids || (id !== "adrian" && id !== "alixia")).map(id => ({ id, items: rows[id].sort((x, y) => (x.status === "added") - (y.status === "added") || (x.a ?? 9999) - (y.a ?? 9999)) })).filter(r => r.items.length);
       const n = list.reduce((s, r) => s + r.items.filter(x => x.status !== "same" && !x.cause).length, 0);
       diffs += n;
       days.push({ k, name: WD[parse(k).getDay()], custody, estimated: custodyEstimated(k), rows: list, diffs: n });

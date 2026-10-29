@@ -10,13 +10,16 @@ const Sched = (() => {
   const endOf = (sch, d) => (sch.endOverrides && sch.endOverrides[d]) || sch.end;
 
   // Événements d'une personne pour un jour (1 = lundi ... 5 = vendredi).
-  function eventsFor(p, d) {
+  // withKids : semaine avec A² (Adrian et Alixia chez Yves) ou sans eux (chez l'autre parent : ils n'apparaissent plus et
+  // Yves n'a ni garderie à récupérer ni enchaînement de garderie le lundi soir).
+  function eventsFor(p, d, withKids = true) {
     const s = S[p] || {}, out = [];
+    if (!withKids && (p === "adrian" || p === "alixia")) return out;
     if (p === "moi") {
       const w = s.work, o = w.office;
       if (o && o.days.includes(d)) {
         out.push(ev(o.train, o.backAtWaremme, `Bruxelles (train ${T(M(o.train))}, retour ${T(M(o.backAtWaremme))})`, { kind: "travel" }));
-        out.push(ev(o.backAtWaremme, S.alixia.childcare.closes, "Garderie : récupérer Alixia (et Adrian)", { kind: "care", est: true, dep: "kidcare" }));
+        if (withKids) out.push(ev(o.backAtWaremme, S.alixia.childcare.closes, "Garderie : récupérer Alixia (et Adrian)", { kind: "care", est: true, dep: "kidcare" }));
       } else {
         let end = w.end;
         const pool = S.lukas.activities.find(a => a.days.includes(d) && a.blocked);
@@ -26,9 +29,9 @@ const Sched = (() => {
         out.push(ev(w.start, end, "Télétravail (début au plus tard 9 h)", { est: true }));
         if (pool) {
           out.push(ev(pool.blocked[0], pool.blocked[1], `Piscine avec Lukas (je travaille depuis la cafétéria)`, { kind: "act", dep: "school:lukas" }));
-          out.push(ev(pool.blocked[1], S.alixia.childcare.closes, "Garderie : récupérer Alixia (et Adrian)", { kind: "care", est: true, dep: "kidcare" }));
+          if (withKids) out.push(ev(pool.blocked[1], S.alixia.childcare.closes, "Garderie : récupérer Alixia (et Adrian)", { kind: "care", est: true, dep: "kidcare" }));
         }
-        if (mon) out.push(ev(mon[0], mon[1], "Garderie puis Liège : chercher Louanne (18 h)", { kind: "travel", est: true, dep: "routine1" }));
+        if (mon) out.push(ev(mon[0], mon[1], withKids ? "Garderie puis Liège : chercher Louanne (18 h)" : "Liège : chercher Louanne (18 h)", { kind: "travel", est: true, dep: "routine1" }));
       }
     } else if (p === "emilie") {
       const w = s.work[d];

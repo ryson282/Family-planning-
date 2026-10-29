@@ -7,6 +7,11 @@ on:
 
 permissions:
   contents: write
+  actions: write # pour relancer la publication quand quelque chose a changé
+
+concurrency:
+  group: data-sync
+  cancel-in-progress: false
 
 jobs:
   holidays:
@@ -19,8 +24,22 @@ jobs:
       - name: Récupérer les congés scolaires FWB
         run: node scripts/fetch-holidays.mjs
       - name: Enregistrer si modifié
+        id: commit
         run: |
           git config user.name "holidays-sync"
           git config user.email "holidays-sync@users.noreply.github.com"
           git add data/school-holidays-auto.js
-          git diff --cached --quiet || (git commit -m "Mise à jour des congés scolaires" && git push)
+          if git diff --cached --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git commit -m "Mise à jour des congés scolaires"
+          ok=0
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push; then ok=1; break; fi
+            sleep 5
+          done
+          [ "$ok" = 1 ] || { echo "::error::Impossible de pousser la mise à jour des congés."; exit 1; }
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Republier le site
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-cloudflare.yml --ref main

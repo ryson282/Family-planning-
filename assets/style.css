@@ -90,3 +90,8 @@ nav a:focus-visible,button:focus-visible,select:focus-visible,summary:focus-visi
 .wchip.removed .why{text-decoration:none;display:inline-block}
 .linkbtn{margin-top:8px;background:none;border:0;color:var(--accent);padding:6px 0;font-weight:600;cursor:pointer}
 @media(max-width:640px){.bar.top .seg{flex:1 1 100%}.seg button{flex:1;min-height:44px}.prow{flex-direction:column;gap:3px}.pn{flex:none}}
+/* Page Tâches : actions des suggestions, bouton compact, nouvelle tâche repliée */
+.mini{padding:2px 10px;font-size:.8rem;min-height:0}.acts{display:flex;gap:6px;align-items:center}
+.add-box{margin-top:8px}.add-box summary{cursor:pointer;padding:8px 0}.add-box form{margin-top:6px}
+form.add{grid-template-columns:2fr 1fr 1fr 1fr 1fr auto}
+@media(max-width:640px){.item.sugg .acts{order:3;margin-left:auto}.mini{min-height:44px;padding:2px 14px}}

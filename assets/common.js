@@ -3,7 +3,7 @@ const pad = n => String(n).padStart(2, "0");
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const parse = s => { const [y, m, d] = s.slice(0, 10).split("-").map(Number); return new Date(y, m - 1, d); };
 const fmt = d => d.toLocaleDateString("fr-BE", { weekday: "short", day: "numeric", month: "short" });
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // Congés récupérés automatiquement : ajoutés seulement après la dernière entrée saisie à la main.
 (function mergeAutoHolidays() {
@@ -59,7 +59,7 @@ function ruleCustody(day) {
       return day <= addDays(h.start, 4) ? r.shortBreakFirst : otherParent(r.shortBreakFirst);
     }
   }
-  const weeks = Math.floor((parse(day) - parse(r.anchorWednesday)) / (7 * MS));
+  const weeks = Math.floor(Math.round((parse(day) - parse(r.anchorWednesday)) / MS) / 7); // jours entiers : insensible à l'heure d'été
   return weeks % 2 === 0 ? r.anchorParent : otherParent(r.anchorParent);
 }
 
@@ -119,7 +119,7 @@ function childcareGaps() {
   const gaps = [];
   childcareDays().filter(d => !d.solution).forEach(d => {
     const g = gaps[gaps.length - 1];
-    const gapDays = g && g.holiday === d.holiday ? (parse(d.date) - parse(g.end)) / MS : 99;
+    const gapDays = g && g.holiday === d.holiday ? Math.round((parse(d.date) - parse(g.end)) / MS) : 99;
     if (gapDays <= 3) g.end = d.date; else gaps.push({ holiday: d.holiday, start: d.date, end: d.date });
   });
   return gaps;
@@ -156,6 +156,23 @@ function awayPeriods() {
     close();
   });
   return out;
+}
+
+// Heure (minutes depuis minuit) à partir de laquelle Yves ET Émilie sont libres le soir d'un jour de semaine (1 = lundi ... 5 = vendredi) :
+// après leurs activités (+ 15 min), le retour de Bruxelles (+ 30 min), la piscine de Lukas, la récupération de Louanne le lundi. Avant 19 h : non.
+function eveningFreeFrom(dow) {
+  const S = window.SCHEDULES;
+  const hm = h => { const [a, b] = h.split(":").map(Number); return a * 60 + b; };
+  let t = 19 * 60;
+  if (S) {
+    ((S.emilie || {}).activities || []).filter(a => a.days.includes(dow) && a.end).forEach(a => { t = Math.max(t, hm(a.end) + 15); });
+    const o = S.moi && S.moi.work && S.moi.work.office;
+    if (o && o.days.includes(dow)) t = Math.max(t, hm(o.backAtWaremme) + 30);
+    const pool = ((S.lukas || {}).activities || []).find(a => a.days.includes(dow) && a.blocked);
+    if (pool) t = Math.max(t, hm(pool.blocked[1]) + 30);
+    if (dow === 1 && S.routines && S.routines[0] && S.routines[0].estimated) t = Math.max(t, hm(S.routines[0].estimated[1]) + 30);
+  }
+  return Math.ceil(t / 5) * 5;
 }
 
 // Fenêtres pour sortir avec Émilie dans les `horizon` prochains jours : semaines où A² est chez l'autre parent

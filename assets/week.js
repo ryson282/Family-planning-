@@ -38,8 +38,14 @@ const WeekView = (() => {
       ORDER.forEach(id => conges.filter(c => c.persons.includes(id)).forEach(c => rows[id].push({ label: "Congé : " + c.name, status: "added", cause: true })));
       (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "rentree" && inRange(k, h.start, h.end)).forEach(h => ["alixia", "adrian", "lukas"].forEach(id => rows[id].push({ label: h.name, status: "added" })));
       if (careByDay[k]) rows.moi.push({ label: "Garde A² en congé : " + (careByDay[k].solution || "à organiser"), status: "added" });
-      events.filter(e => inRange(k, e.date, e.end) && !CONGE_EVENT.test(e.title)).forEach(e =>
-        (e.person ? String(e.person).split(",") : ["famille"]).forEach(id => rows[rows[id] ? id : "famille"].push({ a: e.time ? Sched.M(e.time) : undefined, label: e.title, status: "added" })));
+      events.filter(e => inRange(k, e.date, e.end) && !CONGE_EVENT.test(e.title)).forEach(e => {
+        const a = e.time ? Sched.M(e.time) : undefined, b = e.timeEnd ? Sched.M(e.timeEnd) : undefined;
+        (e.person ? String(e.person).split(",") : ["famille"]).forEach(id => {
+          // A² chez l'autre parent : leurs lignes n'apparaissent pas, sauf un événement qui demande la présence d'un parent (réunion de parents, voyage…), rattaché à Yves
+          if (!withKids && (id === "adrian" || id === "alixia")) { if (e.needsParent) rows.moi.push({ a, b, label: `${e.title} (${short(id)})`, status: "added", kind: "parent" }); return; }
+          rows[rows[id] ? id : "famille"].push({ a, b, label: e.title, status: "added" });
+        });
+      });
       const list = ORDER.filter(id => withKids || (id !== "adrian" && id !== "alixia")).map(id => ({ id, items: rows[id].sort((x, y) => (x.status === "added") - (y.status === "added") || (x.a ?? 9999) - (y.a ?? 9999)) })).filter(r => r.items.length);
       const n = list.reduce((s, r) => s + r.items.filter(x => x.status !== "same" && !x.cause).length, 0);
       diffs += n;

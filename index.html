@@ -30,7 +30,7 @@
       </div>
       <p class="muted sync" id="upd"></p>
       <div class="grid" id="grid"></div>
-      <div class="detail" id="detail" aria-live="polite"><h3 id="dTitle"></h3><ul class="list" id="dList"></ul><button type="button" id="toWeek" class="linkbtn">Voir la semaine de ce jour →</button></div>
+      <div class="detail" id="detail" aria-live="polite"><h3 id="dTitle"></h3><ul class="list" id="dList"></ul><div id="dActions"></div><button type="button" id="toWeek" class="linkbtn">Voir la semaine de ce jour →</button></div>
       <details class="legend-box">
         <summary>Légende</summary>
         <div class="legend">
@@ -102,12 +102,35 @@ function dayDetail(k) {
   const conges = congesOn(k).filter(g => !whoSel.value || g.persons.includes(whoSel.value));
   if (conges.length) rows.push(`<li><span class="t">${conges.map(g => `${esc(g.name)} <span class="muted">· ${esc(personName(g.persons.join(",")))}</span>`).join("<br>")}</span>${catTag("Congé")}</li>`);
   if (h && h.type === "rentree") rows.push(`<li><span class="t">${esc(h.name)} <span class="muted">· ${esc(personName(KIDS.join(",")))}</span></span>${catTag("École")}</li>`);
-  if (c) rows.push(`<li><span class="t">${c === "moi" ? "Enfants chez moi" : c === "autre" ? "Enfants chez l'autre parent" : "Jour d'échange"}${custodyEstimated(k) ? " <span class=\"muted\">(estimé par règle)</span>" : ""}</span>${catTag("Garde")}</li>`);
+  if (c) rows.push(`<li><span class="t">${c === "moi" ? "Enfants chez moi" : c === "autre" ? "Enfants chez l'autre parent" : "Jour d'échange"}${(window.CUSTODY_OVERRIDES || {})[k] ? " <span class=\"muted\">(modifié à la main)</span>" : custodyEstimated(k) ? " <span class=\"muted\">(estimé par règle)</span>" : ""}</span>${catTag("Garde")}</li>`);
   if (cc) rows.push(`<li><span class="t">🧒 Garde de A² en congé : ${esc(cc.solution || "à organiser")}</span>${catTag("Garde")}</li>`);
   if (he) rows.push(`<li><span class="t">🐱 Maison vide : Lana ${he.sitter ? "gardée par " + esc(he.sitter) : "sans solution de garde"}</span>${catTag("Maison")}</li>`);
   events.filter(e => visible(e) && inRange(k, e.date, e.end) && !CONGE_EVENT.test(e.title)).forEach(e =>
     rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : e.source ? ` <span class="muted">· ${esc(calendarLabel(e.source))}</span>` : ""}</span></li>`));
   return rows.length ? rows.join("") : `<li class="muted">Rien de particulier ce jour-là.</li>`;
+}
+
+// Modifier la garde d'un jour (échange exceptionnel, changement de dernière minute) ou signaler un enfant malade : enregistré dans l'application, partagé entre appareils.
+function dayActions(k) {
+  const cur = (window.CUSTODY_OVERRIDES || {})[k], kids = ["alixia", "adrian", "lukas"].map(i => `<option value="${i}">${esc(personName(i))}</option>`).join("");
+  return `<details class="dact"><summary>Modifier la garde ce jour…</summary>
+    <div class="dacts"><button data-ov="moi">Enfants chez moi</button><button data-ov="autre">Chez l'autre parent</button><button data-ov="echange">Jour d'échange</button>${cur ? `<button data-ov="">Rétablir le rythme habituel</button>` : ""}</div>
+    <label class="dlgrow">Jusqu'au (facultatif : plusieurs jours)<input type="date" id="ovTo" min="${k}"></label>
+    <div class="dacts"><select id="sickWho" aria-label="Enfant">${kids}</select><button data-sick="1">Enfant malade ou école fermée : créer la tâche</button></div>
+    <p class="muted" id="dFlash" aria-live="polite"></p></details>`;
+}
+async function applyOverride(v) {
+  const k = selDay, picked = (document.getElementById("ovTo") || {}).value, days = [];
+  if (!v && !picked) { for (let d = k; (window.CUSTODY_OVERRIDES || {})[d] && days.length < 31; d = addDays(d, 1)) days.push(d); } // rétablir : toute la suite d'exceptions consécutives
+  else for (let d = k; d <= (!picked || picked < k ? k : picked) && days.length < 31; d = addDays(d, 1)) days.push(d);
+  for (const d of days) { if (v) await Records.put({ id: "o" + d, kind: "override", date: d, who: v }); else await Records.remove("o" + d); }
+  recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek();
+}
+async function sickTask() {
+  const who = document.getElementById("sickWho").value;
+  await Records.put({ id: Records.newId("t"), title: `Enfant malade ou école fermée : ${personName(who)} — qui reste à la maison ?`, who: "moi", cat: "Garde", due: selDay, done: false });
+  document.getElementById("dFlash").textContent = "Tâche créée dans « Tâches » pour ce jour.";
+  renderHome();
 }
 
 function render() {
@@ -133,6 +156,7 @@ function render() {
   }
   document.getElementById("dTitle").textContent = longDay(selDay);
   document.getElementById("dList").innerHTML = dayDetail(selDay);
+  document.getElementById("dActions").innerHTML = dayActions(selDay);
   document.getElementById("upd").textContent = window.CALENDAR_UPDATED ? "Agendas synchronisés le " + new Date(window.CALENDAR_UPDATED).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" }) : "Agendas Google non synchronisés";
 }
 
@@ -223,6 +247,11 @@ document.getElementById("toWeek").onclick = () => { weekStart = WeekView.mondayO
 document.getElementById("prev").onclick = () => goMonth(-1);
 document.getElementById("next").onclick = () => goMonth(1);
 document.getElementById("today").onclick = () => { cur = new Date(); cur.setDate(1); selDay = todayIso(); render(); };
+document.getElementById("detail").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.ov !== undefined) applyOverride(b.dataset.ov);
+  if (b.dataset.sick) sickTask();
+});
 const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.dataset.d; render(); const f = document.querySelector(".day.sel"); if (f) f.focus({ preventScroll: true }); } };
 document.getElementById("grid").addEventListener("click", pick);
 document.getElementById("grid").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });

@@ -52,6 +52,9 @@ const seen = new Set();
   range("data/school-events.js", l, e.date, e.end);
   String(e.person || "").split(",").filter(Boolean).forEach(p => { if (!people.has(p)) err("data/school-events.js", `${l} : personne « ${p} » inconnue`); });
   if (!e.person) warn("data/school-events.js", `${l} : aucune personne`);
+  if (e.time !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(e.time)) err("data/school-events.js", `${l} : heure invalide « ${e.time} »`);
+  if (e.dueOffset !== undefined && !Number.isInteger(e.dueOffset)) err("data/school-events.js", `${l} : dueOffset doit être un entier`);
+  if (e.dueOffset !== undefined && !e.todo) warn("data/school-events.js", `${l} : dueOffset sans todo`);
   const k = `${e.date}|${e.title}|${e.person}`; if (seen.has(k)) warn("data/school-events.js", `${l} en double`); seen.add(k);
 });
 

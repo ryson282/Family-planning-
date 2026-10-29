@@ -19,8 +19,9 @@ const Records = (() => {
   function apply(list = local()) {
     if (!base) base = { plans: window.CHILDCARE_PLANS || [], house: window.HOUSE_EMPTY || [] };
     window.CUSTODY_OVERRIDES = Object.fromEntries(of("override", list).filter(r => r.date && ["moi", "autre", "echange"].includes(r.who)).map(r => [r.date, r.who]));
-    window.CHILDCARE_PLANS = [...base.plans, ...of("childcare", list).filter(r => r.start && r.end).map(r => ({ start: r.start, end: r.end, solution: r.solution + (r.status === "à confirmer" ? " (à confirmer)" : ""), record: r.id }))];
-    window.HOUSE_EMPTY = [...base.house, ...of("house", list).filter(r => r.start && r.end).map(r => ({ start: r.start, end: r.end, sitter: r.sitter || "", note: r.note || "", record: r.id }))];
+    const cp = of("childcare", list).filter(r => r.start && r.end), hr = of("house", list).filter(r => r.start && r.end);
+    window.CHILDCARE_PLANS = [...base.plans.filter(b => !cp.some(r => r.start === b.start && r.end === b.end)), ...cp.map(r => ({ start: r.start, end: r.end, solution: r.solution + (r.status === "à confirmer" ? " (à confirmer)" : ""), record: r.id }))];
+    window.HOUSE_EMPTY = [...base.house.filter(b => !hr.some(r => r.start === b.start && r.end === b.end)), ...hr.map(r => ({ start: r.start, end: r.end, sitter: r.sitter || "", note: r.note || "", record: r.id }))];
     window.HOLIDAY_DECISIONS = Object.fromEntries(of("holiday", list).map(r => [`${r.key}:${r.year}`, r]));
     window.HOUSEHOLD_DEADLINES = of("deadline", list);
     return list;

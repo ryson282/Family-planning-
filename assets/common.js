@@ -173,6 +173,57 @@ function outingWindows(today, horizon) {
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
 
+// Congés consolidés : vacances FWB, jours fériés, congés isolés de l'école et vacances ULiège, avec les personnes concernées.
+// Les périodes de même nom (« Vacances d'automne (Toussaint) » et « ULiège : vacances d'automne ») sont regroupées.
+const KIDS = ["alixia", "adrian", "lukas"], STUDENTS = [...KIDS, "louanne"];
+const CONGE_EVENT = /^(Congé : |ULiège : (vacances|congé))/; // événements scolaires repris dans les congés consolidés
+const upFirst = t => t.charAt(0).toUpperCase() + t.slice(1);
+function congeKey(name) {
+  const k = name.replace(/^ULiège : /, "").replace(/ \(.*\)/, "").trim().toLowerCase();
+  return k === "vacances de noël" ? "vacances d'hiver" : k;
+}
+function congePeriods() {
+  const out = [];
+  (window.SCHOOL_HOLIDAYS || []).forEach(h => {
+    if (h.type === "vacances") out.push({ name: h.name, start: h.start, end: h.end, persons: KIDS });
+    else if (h.type === "ferie") out.push({ name: h.name, start: h.start, end: h.end, persons: STUDENTS }); // l'ULiège suspend aussi ses activités
+  });
+  (window.SCHOOL_EVENTS || []).forEach(e => {
+    if (/^Congé : /.test(e.title)) out.push({ name: e.title.replace(/^Congé : /, ""), start: e.date, end: e.end || e.date, persons: String(e.person).split(",") });
+    else if (e.person === "louanne" && /^ULiège : (vacances|congé)/.test(e.title)) out.push({ name: e.title.replace(/^ULiège : /, ""), start: e.date, end: e.end || e.date, persons: ["louanne"] });
+  });
+  return out.map(p => ({ ...p, key: congeKey(p.name) }));
+}
+const orderPersons = ps => [...STUDENTS.filter(x => ps.includes(x)), ...ps.filter(x => !STUDENTS.includes(x))];
+const congeName = n => upFirst(n.replace(/^ULiège : /, ""));
+// Congés d'un jour donné : une entrée par nom de congé, avec l'ensemble des personnes concernées.
+function congesOn(day) {
+  const g = new Map();
+  congePeriods().filter(p => inRange(day, p.start, p.end)).forEach(p => {
+    const c = g.get(p.key) || { name: p.name, persons: new Set() };
+    if (/^ULiège/.test(c.name) && !/^ULiège/.test(p.name)) c.name = p.name; // on préfère le nom de l'école
+    p.persons.forEach(x => c.persons.add(x));
+    g.set(p.key, c);
+  });
+  return [...g.values()].map(c => ({ name: congeName(c.name), persons: orderPersons([...c.persons]) }));
+}
+// Congés à venir, regroupés par nom : { name, start, groups: [{ end, persons }] } (personnes réunies selon leur date de fin).
+function congesUpcoming(today, limit) {
+  const clusters = [];
+  congePeriods().filter(p => p.end >= today && p.start <= limit).sort((a, b) => a.start.localeCompare(b.start)).forEach(p => {
+    let c = clusters.find(c => c.key === p.key && p.start <= addDays(c.end, 3));
+    if (!c) { c = { key: p.key, name: p.name, start: p.start, end: p.end, ends: new Map() }; clusters.push(c); }
+    if (/^ULiège/.test(c.name) && !/^ULiège/.test(p.name)) c.name = p.name;
+    if (p.end > c.end) c.end = p.end;
+    p.persons.forEach(x => { if ((c.ends.get(x) || "") < p.end) c.ends.set(x, p.end); });
+  });
+  return clusters.map(c => {
+    const byEnd = new Map();
+    c.ends.forEach((end, x) => byEnd.set(end, [...(byEnd.get(end) || []), x]));
+    return { name: congeName(c.name), start: c.start, groups: [...byEnd].sort((a, b) => a[0].localeCompare(b[0])).map(([end, ps]) => ({ end, persons: orderPersons(ps) })) };
+  });
+}
+
 // Libellé affiché pour un agenda (data/calendar-filters.js) : « Emeline » devient « Garde A² ».
 const calendarLabel = name => (window.CALENDAR_LABELS || {})[name] || name;
 
@@ -204,7 +255,8 @@ function allEvents() {
 // Tag coloré selon le type d'action (catégorie) : Garde, École, Administratif, Santé, Activités, Vacances, Sorties, Maison, Autre.
 function catTag(cat) {
   const key = String(cat || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  const known = ["garde", "ecole", "administratif", "sante", "activites", "vacances", "sorties", "maison"].find(k => key === k || key.startsWith(k + " "));
+  const alias = { conge: "vacances" };
+  const known = alias[key] || ["garde", "ecole", "administratif", "sante", "activites", "vacances", "sorties", "maison"].find(k => key === k || key.startsWith(k + " "));
   return `<span class="tag cat-${known || "autre"}">${esc(cat)}</span>`;
 }
 

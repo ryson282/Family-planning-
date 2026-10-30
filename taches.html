@@ -19,7 +19,7 @@
       <form class="add" id="f">
         <input id="title" placeholder="Nouvelle tâche…" aria-label="Titre de la tâche" required>
         <select id="who" aria-label="Responsable"></select>
-        <select id="cat" aria-label="Catégorie"><option>Garde</option><option>École</option><option>Administratif</option><option>Santé</option><option>Activités</option><option>Vacances</option><option>Sorties</option><option>Maison</option><option>Autre</option></select>
+        <select id="cat" aria-label="Catégorie"><option>Garde</option><option>École</option><option>Administratif</option><option>Santé</option><option>Activités</option><option>Vacances</option><option>Maison</option><option>Autre</option></select>
         <input id="due" type="date" aria-label="Échéance">
         <input id="time" type="time" aria-label="Heure (facultatif)">
         <button class="primary">Ajouter</button>
@@ -171,7 +171,7 @@ async function runSync() {
   renderStatus();
 }
 
-// Nettoyage : les tâches de planning liées à une période (garde, vacances, Lana, sorties) et les suggestions écartées sont supprimées
+// Nettoyage : les tâches de planning liées à une période (garde, vacances, Lana ; l'ancienne tâche « Sortie avec Émilie » n'est conservée ici que pour être purgée) et les suggestions écartées sont supprimées
 // une fois la période passée. Les tâches libres (et les entretiens) ne sont jamais supprimées automatiquement.
 // Anciennes tâches sans « until » : reconnues seulement si leur titre est exactement celui d'une suggestion de période.
 const GENERATED_RE = /^(Planification de (?:garde A² \(Adrian et Alixia\)|vacances)|Garde de Lana si départ en vacances|Trouver qui garde Lana du|Sortie avec Émilie) (?:du \S+ \d{1,2} \S+ au \S+ \d{1,2} \S+|\S+ \d{1,2} \S+)/;

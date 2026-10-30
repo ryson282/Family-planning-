@@ -18,7 +18,7 @@ const W = ctx;
 const isDate = s => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + "T12:00:00Z").toISOString().slice(0, 10) === s;
 const dow = s => new Date(s + "T12:00:00Z").getUTCDay();
 const people = new Set((W.PEOPLE || []).map(p => p.id));
-const CATS = ["Garde", "École", "Administratif", "Santé", "Activités", "Vacances", "Sorties", "Maison", "Autre"];
+const CATS = ["Garde", "École", "Administratif", "Santé", "Activités", "Vacances", "Maison", "Autre"];
 const WHO = new Set([...people, "famille"]);
 const range = (file, label, start, end) => {
   if (!isDate(start)) return err(file, `${label} : date de début invalide « ${start} »`);

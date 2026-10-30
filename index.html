@@ -113,7 +113,7 @@ function eventForm(k) {
   const r = editing || {}, picked = String(r.person || "").split(",").filter(Boolean), more = r.house || r.noschool || r.remind;
   const boxes = PEOPLE.filter(p => !p.pet).map(p => `<label class="check"><input type="checkbox" name="person" value="${esc(p.id)}"${picked.includes(p.id) ? " checked" : ""}> ${esc(p.name.replace(/ \(.*\)/, ""))}</label>`).join("");
   const presets = ["Médecin", "Dentiste", "Sortie", "Voyage"].map(t => `<button type="button" class="mini" data-preset="${t}">${t}</button>`).join("");
-  const remind = [["", "À l'heure habituelle (1 h avant, ou la veille à 18 h)"], ["1", "La veille"], ["2", "2 jours avant"], ["7", "1 semaine avant"]].map(([v, l]) => `<option value="${v}"${String(r.remind || "") === v ? " selected" : ""}>${l}</option>`).join("");
+  const remind = [["", "À l'heure habituelle (1 h avant, ou la veille à 18 h)"], ["1", "La veille"], ["2", "2 jours avant"], ["3", "3 jours avant"], ["7", "1 semaine avant"], ["14", "2 semaines avant"]].map(([v, l]) => `<option value="${v}"${String(r.remind || "") === v ? " selected" : ""}>${l}</option>`).join("");
   return `<details class="dact" id="evBox"${editing ? " open" : ""}><summary>${r.id ? "Modifier l'événement" : "＋ Ajouter un événement ce jour"}</summary>
     <form id="evForm" class="holform" autocomplete="off">
       ${r.id ? "" : `<div class="dacts" aria-label="Modèles">${presets}</div>`}
@@ -197,9 +197,13 @@ function renderHome() {
   const alerts = [];
   if (late.length) alerts.push(["bad", `<a href="taches.html">⚠ ${late.length} tâche${late.length > 1 ? "s" : ""} en retard</a> : ${list(late)}`]);
   if (soon.length) alerts.push(["warn", `<a href="taches.html">${soon.length} tâche${soon.length > 1 ? "s" : ""} à faire d'ici 3 jours</a> : ${list(soon)}`]);
-  // Sorties à deux : rappel quand la dernière date de plus de 3 semaines (seulement si une sortie a déjà été notée)
+  // Sorties à deux : invitation (pas un reproche) quand la dernière date de plus de 3 semaines, sauf si une sortie est déjà prévue dans les 14 jours.
+  // Seulement après une première sortie notée.
   const lastOut = lastOuting(Records.local());
-  if (lastOut) { const dOut = Math.round((parse(today) - parse(lastOut)) / MS); if (dOut > OUTING_GOAL_DAYS) alerts.push(["warn", `<a href="sorties.html">Dernière sortie à deux : il y a ${dOut < 14 ? dOut + " jours" : Math.floor(dOut / 7) + " semaines"}</a> : voir les occasions`]); }
+  if (lastOut && !Records.of("event").some(r => r.outing && r.date >= today && r.date <= addDays(today, 14))) {
+    const dOut = Math.round((parse(today) - parse(lastOut)) / MS);
+    if (dOut > OUTING_GOAL_DAYS) alerts.push(["warn", `<a href="sorties.html">Ça fait ${Math.floor(dOut / 7)} semaines : une soirée à deux ?</a> Voir les occasions`]);
+  }
   if (undated.length) alerts.push(["warn", `<a href="taches.html">${undated.length} tâche${undated.length > 1 ? "s" : ""} sans date</a> : ${list(undated)}`]);
   childcareGaps().filter(g => g.end >= today && g.start <= addDays(today, 14)).forEach(g => alerts.push(["bad", `<a href="taches.html">Garde d'Adrian et Alixia à organiser</a> ${range(g.start, g.end)} (${esc(g.holiday.replace(/ \(.*\)/, ""))})`]));
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today && a.start <= addDays(today, 30)).forEach(a => alerts.push(["bad", `<a href="taches.html">Qui garde Lana ?</a> ${range(a.start, a.end)}`]));
@@ -217,7 +221,7 @@ function renderHome() {
   const add = (d, text, tag, href) => { const key = d + "|" + text; if (seen.has(key)) return; seen.add(key); rows.push({ d, text, tag, href }); };
   tasks.filter(t => t.due && t.due > today && t.due <= lim && (!who || t.who === who || t.who === "famille")).forEach(t => add(t.due, t.title + (t.time ? " à " + t.time.replace(":", " h ") : ""), t.cat, "taches.html"));
   events.filter(e => visible(e) && e.end >= today && e.date <= lim && !CONGE_EVENT.test(e.title) && !/^ULiège : (vacances|congé)/.test(e.title))
-    .forEach(e => add(e.date < today ? today : e.date, (e.time ? e.time + " " : "") + e.title + (e.todo ? " — " + e.todo : "") + (e.person ? " · " + personName(e.person) : e.rec ? " · Famille" : ""), e.rec ? "Rendez-vous" : calendarLabel(e.source)));
+    .forEach(e => add(e.date < today ? today : e.date, (e.time ? e.time + " " : "") + e.title + (e.todo ? " — " + e.todo : "") + (e.person ? " · " + personName(e.person) : e.rec ? " · Famille" : ""), e.rec ? (e.outing ? "Sorties" : "Rendez-vous") : calendarLabel(e.source)));
   congesUpcoming(today, addDays(today, 30)).filter(c => c.start > today).forEach(c => add(c.start, "Congé : " + c.name + " · " + personName(c.groups.flatMap(g => g.persons).join(",")), "Congé"));
   custodyPeriods().filter(p => p.start > today && p.start <= lim).slice(0, 1).forEach(p => add(p.start, (p.who === "moi" ? "Les enfants arrivent chez Yves" : "Les enfants partent chez l'autre parent") + " jusqu'au " + fmt(parse(p.end)), "Garde"));
   const annual = annualTasks(today).filter(t => t.due <= addDays(today, 21) && !known.has(t.title) && (!who || t.who === who || t.who === "famille"));
@@ -267,7 +271,10 @@ document.getElementById("detail").addEventListener("click", e => {
   if (b.dataset.ov !== undefined) applyOverride(b.dataset.ov);
   if (b.dataset.sick) sickTask();
   if (b.dataset.preset) {
-    const t = document.querySelector("#evForm [name=title]"); if (!t.value.trim()) t.value = b.dataset.preset + (b.dataset.preset === "Voyage" ? "" : " : "); t.focus();
+    const t = document.querySelector("#evForm [name=title]");
+    if (b.dataset.preset === "Sortie") { t.value = "Sortie à deux"; document.getElementById("evForm").dataset.outing = "1"; ["moi", "emilie"].forEach(id => { document.querySelector(`#evForm [name=person][value=${id}]`).checked = true; }); }
+    else if (!t.value.trim()) t.value = b.dataset.preset + (b.dataset.preset === "Voyage" ? "" : " : ");
+    t.focus();
     if (b.dataset.preset === "Voyage") { document.getElementById("evMore").open = true; document.querySelector("#evForm [name=house]").checked = true; }
   }
   if (b.dataset.evedit) { editing = Records.of("event").find(r => String(r.id) === b.dataset.evedit) || null; notice = ""; render(); const f = document.getElementById("evBox"); if (f) f.scrollIntoView({ block: "center" }); }
@@ -301,9 +308,10 @@ document.getElementById("detail").addEventListener("submit", async e => {
   if (e.target.id !== "evForm") return;
   e.preventDefault();
   const f = new FormData(e.target), v = n => (f.get(n) || "").toString().trim();
-  const rec = { id: editing && editing.id ? editing.id : Records.newId("e"), kind: "event", title: v("title"), date: v("date"), end: v("end"), time: v("time"), timeEnd: v("timeEnd"), person: f.getAll("person").join(","), note: v("note"),
+  const rec = { ...(editing && editing.id ? editing : {}), id: editing && editing.id ? editing.id : Records.newId("e"), kind: "event", title: v("title"), date: v("date"), end: v("end"), time: v("time"), timeEnd: v("timeEnd"), person: f.getAll("person").join(","), note: v("note"),
     house: f.has("house"), sitter: v("sitter"), noschool: f.has("noschool"), remind: v("remind") };
   if (editing && editing.series) rec.series = editing.series;
+  if (e.target.dataset.outing) { rec.outing = true; rec.otype = rec.otype || "heures"; } // préréglage « Sortie » : compté comme une sortie à deux
   const flash = t => { document.getElementById("evFlash").textContent = t; };
   if (!rec.title || !rec.date) return flash("Titre et date obligatoires.");
   if (rec.end && rec.end < rec.date) return flash("La date de fin précède le début.");

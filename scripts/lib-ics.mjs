@@ -16,6 +16,12 @@ export function alarmAllDay(daysBefore, hour, text) {
   const mins = hour * 60 - daysBefore * 1440;
   return ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsText(text)}`, `TRIGGER:${mins < 0 ? "-" : ""}PT${Math.abs(mins)}M`, "END:VALARM"];
 }
+// Rappel « N jours avant, à telle heure » pour un événement HORAIRE : le déclencheur se compte depuis l'heure de début
+// (alarmAllDay suppose un début à 00:00, ce qui n'est vrai que pour une journée entière).
+export function alarmFromStart(startHHMM, daysBefore, hour, text) {
+  const mins = hour * 60 - daysBefore * 1440 - (Number(startHHMM.slice(0, 2)) * 60 + Number(startHHMM.slice(3, 5)));
+  return ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsText(text)}`, `TRIGGER:${mins < 0 ? "-" : ""}PT${Math.abs(mins)}M`, "END:VALARM"];
+}
 export const alarmBefore = (minutes, text) => ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsText(text)}`, `TRIGGER:-PT${minutes}M`, "END:VALARM"];
 
 // Événement : journée(s) entière(s) (date, end inclus) ou horaire (time, timeEnd = "HH:MM", heure locale flottante).

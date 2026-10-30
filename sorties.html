@@ -103,52 +103,78 @@ function renderLast() {
 }
 
 // ---- Occasions : une ligne par créneau, avec un type selon le temps libre ---------
+// Règle : un événement NON OPTIONNEL qui concerne Yves, Émilie ou toute la famille (ou qui demande la présence d'un parent) écarte l'occasion
+// s'il recouvre sa plage : soirée (de l'heure libre à 23 h : un événement qui finit plus tard la repousse, un événement avant l'heure libre
+// ne gêne pas) ; journée, week-end, escapade : le moindre événement ce jour-là, à quelque heure que ce soit (sans heure = journée entière,
+// un voyage = tous ses jours). Un événement « (optionnelle) » ou le télétravail ne compte pas.
+const isOpt = e => /optionnel|facultati/i.test(`${e.title} ${e.note || ""}`);
+const toMin = h => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
 function occasions() {
-  const t = today(), horizon = 150, now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
-  const mine = e => !e.person || String(e.person).split(",").some(p => p === "moi" || p === "emilie");
-  const evs = allEvents().filter(e => !CONGE_EVENT.test(e.title) && mine(e) && (e.source !== "École" || e.needsParent));
+  const t = today(), horizon = 150, now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes(), nowQ = Math.ceil(nowMin / 15) * 15;
+  const mine = e => e.needsParent || !e.person || String(e.person).split(",").some(p => p === "moi" || p === "emilie");
+  const evs = allEvents().filter(e => !CONGE_EVENT.test(e.title) && !/^Télétravail/i.test(e.title) && !isOpt(e) && mine(e) && (e.source !== "École" || e.needsParent));
   const off = new Map(daysOff().map(o => [o.date, o.name]));
-  const takenOut = new Set([...plannedAll().map(r => r.date), ...Records.of("outing").map(r => r.date)]);
+  const takenOut = new Set(Records.of("outing").map(r => r.date));
   const fete = k => off.get(k) ? off.get(k).toLowerCase() : ["12-24", "12-31"].includes(k.slice(5)) ? "réveillon" : k.slice(5) === "12-25" ? "Noël" : k.slice(5) === "01-01" ? "Nouvel An" : "";
-  // un événement du soir (17 h ou plus) masque l'occasion ; une journée entière la signale seulement
-  const busy = k => evs.filter(e => inRange(k, e.date, e.end));
-  const hidden = k => takenOut.has(k) || busy(k).some(e => e.time && e.time >= "17:00");
-  const warn = k => { const b = busy(k).filter(e => !e.time || e.time < "17:00"); return b.length ? `déjà prévu : ${b[0].title}${b.length > 1 ? " …" : ""}` : ""; };
-  const out = [];
-  const hours = m => { const h = Math.max(1, Math.round((23 * 60 - m) / 30) / 2); return String(h).replace(".", ","); };
-  const evening = (k, care) => {
-    const d = parse(k).getDay(), m = d === 6 || d === 0 ? 19 * 60 + 30 : eveningFreeFrom(d);
-    if (m > 21 * 60 + 30 || (k === t && nowMin > 21 * 60) || hidden(k)) return;
-    out.push({ type: "heures", date: k, end: "", time: hhmm(Math.max(m, 19 * 60)), care, fete: fete(k), warn: warn(k), label: dayLong(k), sub: `libres dès ${clock(m)}, environ ${hours(m)} h` });
+  const feteIn = (a, b) => { for (let k = a; k <= b; k = addDays(k, 1)) if (fete(k)) return fete(k); return ""; };
+  // plage occupée d'un événement un jour donné, en minutes : sans heure ou sur plusieurs jours = journée entière
+  const span = (e, k) => (!e.time || (e.end && e.end > e.date)) ? [0, 1440] : [toMin(e.time), e.endTime ? toMin(e.endTime) : e.timeEnd ? toMin(e.timeEnd) : toMin(e.time) + 120];
+  const busy = k => evs.filter(e => inRange(k, e.date, e.end || e.date)).map(e => ({ e, s: span(e, k) }));
+  const mention = list => list.length ? `déjà prévu : ${list[0].e.title}${list.length > 1 ? " …" : ""}` : "";
+  // Soirée : heure libre (base du jour, repoussée par un événement qui finit plus tard), ou null si la soirée est prise
+  const eveningStart = k => {
+    const d = parse(k).getDay(); let m = d === 6 || d === 0 ? 19 * 60 + 30 : eveningFreeFrom(d);
+    if (k === t) m = Math.max(m, nowQ);
+    for (const { s } of busy(k)) {
+      if (s[0] <= 0 && s[1] >= 1440) return null;                    // journée entière
+      if (s[1] + 15 > m && s[0] < 23 * 60) { if (s[0] < m) m = Math.max(m, s[1] + 15); else return null; } // commence après l'heure libre : soirée prise
+    }
+    return m > 21 * 60 + 30 || ["12-24", "12-25", "12-31", "01-01"].includes(k.slice(5)) ? null : m;
   };
+  // Journée, week-end, escapade : aucun événement non optionnel ce jour-là, à quelque heure que ce soit
+  const dayFree = k => !takenOut.has(k) && !(k === t && nowMin >= 15 * 60) && busy(k).length === 0;
+  const lana = (a, b, soft) => { const nights = []; for (let k = a; k < b; k = addDays(k, 1)) nights.push(k); if (!nights.length) return ""; const un = nights.filter(k => !houseEmptyOn(k) || !houseEmptyOn(k).sitter); return un.length ? (soft ? "si vous dormez dehors : qui garde Lana ?" : "Lana : à faire garder") : ""; };
+  const hours = m => String(Math.max(1, Math.round((23 * 60 - m) / 30) / 2)).replace(".", ",");
+  const out = [], usedFri = new Set();
+  const evening = (k, care) => {
+    const m = eveningStart(k); if (m === null || takenOut.has(k)) return;
+    out.push({ type: "heures", date: k, end: "", time: hhmm(Math.max(m, 19 * 60)), care, fete: fete(k), warn: mention(busy(k).filter(({ s }) => s[1] > m)), label: dayLong(k), sub: `libres dès ${clock(m)}, environ ${hours(m)} h` });
+  };
+  const journee = k => { if (k >= t && dayFree(k)) out.push({ type: "journee", date: k, end: "", time: "", care: false, fete: fete(k), warn: "", label: dayLong(k), sub: "libres toute la journée" }); };
   outingWindows(t, horizon).forEach(w => {
-    if (w.kind !== "absents") {
-      out.push({ type: "journee", date: w.start, end: w.end, time: "", care: false, fete: "", warn: warn(w.start), label: w.start === w.end ? dayLong(w.start) : `du ${dayLong(w.start)} au ${dayLong(w.end)}`, sub: `journées libres (${w.note || "garde organisée"})` });
+    if (w.kind !== "absents") {                                       // stage ou garde organisée : journées libres
+      const free = []; for (let k = w.start; k <= w.end; k = addDays(k, 1)) if (parse(k).getDay() % 6 !== 0 && dayFree(k)) free.push(k);
+      if (free.length) out.push({ type: "journee", date: free[0], end: free[free.length - 1], time: "", care: false, fete: "", warn: "", label: free[0] === free[free.length - 1] ? dayLong(free[0]) : `du ${dayLong(free[0])} au ${dayLong(free[free.length - 1])}`, sub: `journées libres (${w.note || "garde organisée"})` });
       return;
+    }
+    // Week-ends : samedi ET dimanche libres (journée), avec le vendredi soir s'il est libre ; sinon seulement les journées libres
+    for (let k = w.start; k < w.end; k = addDays(k, 1)) {
+      if (parse(k).getDay() !== 6) continue;
+      const sun = addDays(k, 1), fri = addDays(k, -1);
+      if (k >= t && dayFree(k) && dayFree(sun)) {
+        const fm = fri >= w.start ? eveningStart(fri) : null, start = fm !== null ? fri : k;
+        if (fm !== null) usedFri.add(fri);
+        out.push({ type: "weekend", date: start, end: sun, time: fm !== null ? hhmm(Math.max(fm, 19 * 60)) : "", care: false, fete: feteIn(start, sun), warn: "", lana: lana(start, sun, true),
+          label: `${dayLong(start)} au ${dayLong(sun)}`, sub: fm !== null ? "du vendredi soir au dimanche" : "samedi et dimanche" });
+      }
+      journee(k); journee(sun);                                       // chaque jour libre offre aussi une journée seule
     }
     for (let k = w.start; k <= w.end; k = addDays(k, 1)) {
       const d = parse(k).getDay();
-      if (d === 6 && k < w.end && !hidden(k) && !takenOut.has(addDays(k, 1))) {            // samedi + dimanche dans la période : week-end (avec le vendredi soir si libre)
-        const fri = addDays(k, -1), withFri = fri >= w.start && eveningFreeFrom(5) <= 21 * 60 + 30 && !hidden(fri);
-        const start = withFri ? fri : k, sun = addDays(k, 1);
-        out.push({ type: "weekend", date: start, end: sun, time: withFri ? hhmm(Math.max(eveningFreeFrom(5), 19 * 60)) : "", care: false, fete: fete(k) || fete(sun), warn: warn(k) || warn(sun),
-          label: `${dayLong(start)} au ${dayLong(sun)}`, sub: withFri ? "du vendredi soir au dimanche" : "samedi et dimanche" });
-        // le même week-end offre aussi une journée seule (samedi ou dimanche) : moins de temps à libérer
-        [k, sun].filter(j => !hidden(j) && j >= t).forEach(j => out.push({ type: "journee", date: j, end: "", time: "", care: false, fete: fete(j), warn: warn(j), label: dayLong(j), sub: "libres toute la journée" }));
-        k = sun; continue;
-      }
-      if (d === 6 || d === 0) { if (!hidden(k)) out.push({ type: "journee", date: k, end: "", time: "", care: false, fete: fete(k), warn: warn(k), label: dayLong(k), sub: "libres toute la journée" }); continue; }
-      if (d === 5 && addDays(k, 2) <= w.end) continue; // vendredi déjà compris dans le week-end (samedi et dimanche dans la même période)
-      evening(k, false);
+      if (d === 6 || d === 0) { if (!(d === 6 && k < w.end) && !(d === 0 && addDays(k, -1) >= w.start)) journee(k); continue; }  // samedi ou dimanche isolé
+      if (!usedFri.has(k)) evening(k, false);
     }
   });
-  // Escapade : plusieurs jours de congé (Adrian et Alixia chez l'autre parent)
-  awayPeriods().filter(a => a.end >= t && a.start <= addDays(t, horizon) && Math.round((parse(a.end) - parse(a.start < t ? t : a.start)) / MS) >= 3).forEach(a => {
-    const start = a.start < t ? t : a.start;
-    out.push({ type: "escapade", date: start, end: a.end, time: "", care: false, fete: "", warn: "", label: `du ${dayLong(start)} au ${dayLong(a.end)}`, sub: `${a.holiday.replace(/ \(.*\)/, "")}${a.louanne ? " · " + a.louanne : ""}` });
+  // Escapade : plusieurs jours de congé (Adrian et Alixia chez l'autre parent), réduits aux jours libres de tout événement non optionnel ; au moins 3 jours
+  awayPeriods().filter(a => a.end >= t && a.start <= addDays(t, horizon)).forEach(a => {
+    let run = [];
+    const flush = () => { if (run.length >= 3) { const x = run[0], y = run[run.length - 1];
+      out.push({ type: "escapade", date: x, end: y, time: "", care: false, fete: feteIn(x, y), warn: "", lana: lana(x, y), label: `du ${dayLong(x)} au ${dayLong(y)}`, sub: `${a.holiday.replace(/ \(.*\)/, "")}${a.louanne ? " · " + a.louanne : ""}` }); } run = []; };
+    for (let k = a.start < t ? t : a.start; k <= a.end; k = addDays(k, 1)) { if (busy(k).length === 0 && !takenOut.has(k)) run.push(k); else flush(); }
+    flush();
   });
   // Garde à confirmer : Adrian et Alixia chez Yves, vendredi et samedi soir, Louanne ou Lukas à la maison
-  for (let k = t, n = 0; k <= addDays(t, 60); k = addDays(k, 1)) {
+  for (let k = t; k <= addDays(t, 60); k = addDays(k, 1)) {
     const d = parse(k).getDay();
     if ((d === 5 || d === 6) && custodyOn(k) === "moi") evening(k, true);
   }
@@ -156,7 +182,7 @@ function occasions() {
 }
 
 function occHtml(x, i) {
-  const notes = [x.care ? "garde à confirmer (Louanne ou Lukas ?)" : "", x.fete, x.warn].filter(Boolean).map(esc).join(" · ");
+  const notes = [x.care ? "garde à confirmer (Louanne ou Lukas ?)" : "", x.fete, x.lana, x.warn].filter(Boolean).map(esc).join(" · ");
   return `<li class="item occrow${x.care ? " gard" : ""}"><span class="t"><span class="top">${tag(x.type)}<b>${esc(x.label)}</b></span><span class="occ-note">${esc(x.sub)}${notes ? " · " + notes : ""}</span></span><button data-slot="${i}" class="mini" aria-label="Planifier : ${esc(TYPES[x.type])}, ${esc(x.label)}">Planifier</button></li>`;
 }
 let occ = [];
@@ -170,7 +196,9 @@ function render() {
   document.getElementById("slots").innerHTML = shown.length ? shown.slice(0, 8).map(o => occHtml(o.x, o.i)).join("") : `<li class="muted">Aucune occasion de ce type dans les 5 prochains mois.</li>`;
   document.getElementById("slotsMore").innerHTML = shown.length > 8 ? `<details><summary>${shown.length - 8} autres</summary><ul class="list">${shown.slice(8).map(o => occHtml(o.x, o.i)).join("")}</ul></details>` : "";
   // meilleure occasion : le premier week-end, sinon le premier soir sûr (sans « garde à confirmer »)
-  const best = occ.find(x => x.type === "weekend" && !x.warn) || occ.find(x => x.type === "heures" && !x.care && !x.warn) || occ.find(x => x.type !== "escapade" && !x.warn);
+  // Meilleure occasion : la plus proche sans événement ni garde à confirmer (au plus tôt dans 2 jours) ; un week-end est préféré s'il est à moins de 2 semaines de celle-là
+  const soon = addDays(today(), 2), okBest = x => !x.warn && !x.care && x.type !== "escapade" && x.date >= soon, first = occ.find(okBest);
+  const best = first && (occ.find(x => x.type === "weekend" && okBest(x) && x.date <= addDays(first.date, 14)) || first);
   const bx = document.getElementById("best");
   bx.hidden = !best;
   if (best) bx.innerHTML = `<span class="t"><b>Meilleure occasion</b><br>${tag(best.type)} ${esc(best.label)}<span class="occ-note"> · ${esc(best.sub)}</span></span><button type="button" class="primary" data-quick="${occ.indexOf(best)}">Planifier</button>`;

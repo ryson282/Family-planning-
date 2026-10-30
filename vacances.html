@@ -13,7 +13,7 @@
 <header><h1>Vacances</h1></header>
 <main>
   <section class="card">
-    <p style="margin:0">Chaque congé des deux prochaines années : quand partir (A² chez l'autre parent, Louanne libre), la garde de A² et de Lana, et vos décisions (on part, on reste, dates, réservations, budget). Ce que vous décidez ici retire les suggestions correspondantes des tâches et alimente le flux de rappels.</p>
+    <p style="margin:0">Pour chaque congé : quand partir (Adrian et Alixia chez l'autre parent, Louanne libre), la garde des enfants et de Lana, et votre décision. Ce que vous notez ici crée les tâches de préparation et les rappels.</p>
   </section>
   <div id="list"></div>
   <section class="card">
@@ -97,7 +97,9 @@ function card(h, away, gaps, days) {
 function render() {
   const t = today(), aways = awayPeriods(), gaps = childcareGaps(), days = childcareDays();
   const hs = holidays();
-  document.getElementById("list").innerHTML = hs.map(h => card(h, aways.filter(a => a.hstart === h.start), gaps.filter(g => g.holiday === h.name && g.start >= h.start && g.end <= h.end), days.filter(d => d.holiday === h.name && d.date >= h.start && d.date <= h.end && d.date >= t))).join("") || `<section class="card muted">Aucun congé connu dans les deux prochaines années.</section>`;
+  const cards = hs.map(h => card(h, aways.filter(a => a.hstart === h.start), gaps.filter(g => g.holiday === h.name && g.start >= h.start && g.end <= h.end), days.filter(d => d.holiday === h.name && d.date >= h.start && d.date <= h.end && d.date >= t)));
+  // Les deux prochains congés en entier ; les suivants repliés (la plupart sont à plus d'un an)
+  document.getElementById("list").innerHTML = cards.slice(0, 2).join("") + (cards.length > 2 ? `<details class="card"><summary><b>${cards.length - 2} congés suivants</b></summary>${cards.slice(2).join("")}</details>` : "") || `<section class="card muted">Aucun congé connu dans les deux prochaines années.</section>`;
   // Ponts : jours fériés et congés isolés hors vacances, sur 12 mois
   const wd = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."], lim = addDays(t, 365);
   const rows = daysOff().filter(o => o.date >= t && o.date <= lim && !(window.SCHOOL_HOLIDAYS || []).some(h => h.type === "vacances" && o.date >= h.start && o.date <= h.end)).map(o => {

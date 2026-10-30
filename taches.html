@@ -13,9 +13,8 @@
 <header><h1>Tâches familiales</h1></header>
 <main>
   <section class="card">
-    <div class="bar"><h2>À faire</h2><span class="late" id="lateCount"></span><select id="filter" aria-label="Filtrer par personne"><option value="">Toutes les personnes</option></select><select id="me" aria-label="Je suis" title="Sur cet appareil, la liste s'ouvre sur vos tâches"><option value="">Je suis…</option><option value="moi">Je suis Yves</option><option value="emilie">Je suis Émilie</option></select><label class="check muted"><input type="checkbox" id="showDone"> voir les terminées</label></div>
-    <ul class="list" id="list"></ul>
-    <details class="add-box">
+    <div class="bar"><h2>À faire</h2><span class="late" id="lateCount"></span><select id="filter" aria-label="Filtrer par personne"><option value="">Toutes les personnes</option></select><label class="check muted"><input type="checkbox" id="showDone"> voir les terminées</label></div>
+    <details class="add-box" id="addBox" open>
       <summary><b>+ Nouvelle tâche</b></summary>
       <form class="add" id="f">
         <input id="title" placeholder="Nouvelle tâche…" aria-label="Titre de la tâche" required>
@@ -26,12 +25,14 @@
         <button class="primary">Ajouter</button>
       </form>
     </details>
+    <ul class="list" id="list"></ul>
   </section>
   <section class="card" id="sugg" hidden>
     <details open>
       <summary><b>Suggestions d'après le calendrier</b> <span class="muted" id="suggCount"></span></summary>
       <ul class="list" id="suggList"></ul>
-      <p class="muted">« Écarter » = ne pas le faire (ou déjà réglé) : la suggestion ne revient plus.</p>
+      <details id="suggLaterBox" hidden><summary class="muted" id="suggLaterSum"></summary><ul class="list" id="suggLater"></ul></details>
+      <p class="muted">« Ignorer » = ne pas le faire (ou déjà réglé) : la suggestion ne revient plus.</p>
     </details>
   </section>
   <section class="card" id="out" hidden>
@@ -44,7 +45,7 @@
     </details>
   </section>
   <section class="card">
-    <details id="dueBox">
+    <details id="dueBox" open>
       <summary><b>Échéances du foyer</b> <span class="muted" id="dueCount"></span></summary>
       <p class="muted">Dates propres à votre foyer (renouvellement de l'assurance auto, contrôle technique, carte d'identité, vaccin de Lana…) : elles apparaissent dans les suggestions et dans le flux de rappels avant l'échéance.</p>
       <ul class="list" id="dueList"></ul>
@@ -70,6 +71,8 @@
         <button class="primary">Enregistrer</button>
         <button type="button" id="syncOff">Désactiver</button>
       </form>
+      <h3 class="sub" style="margin:14px 0 4px;font-size:.9rem">Cet appareil</h3>
+      <label class="dlgrow">La liste s'ouvre sur les tâches de…<select id="me" aria-label="Qui tient cet appareil"><option value="">Tout le monde</option><option value="moi">Yves</option><option value="emilie">Émilie</option></select></label>
       <h3 class="sub" style="margin:14px 0 4px;font-size:.9rem">Sauvegarde</h3>
       <p class="muted">Un fichier avec toutes vos données (tâches, événements, exceptions de garde, décisions de vacances, échéances) : à garder si le navigateur est effacé ou le téléphone changé.</p>
       <div class="dacts"><button type="button" id="exportBtn">Exporter (fichier)</button><label class="check" style="margin:0"><span class="mini" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;cursor:pointer">Importer…</span><input type="file" id="importFile" accept="application/json,.json" class="sr"></label></div>
@@ -229,12 +232,19 @@ function render() {
   document.getElementById("list").innerHTML = rows.length ? rows.map(t => `
     <li class="item task ${t.done ? "done" : ""}"><input type="checkbox" data-id="${esc(t.id)}" ${t.done ? "checked" : ""} aria-label="Terminée">
     <span class="t">${esc(t.title)}${t.note ? `<small class="note">${esc(t.note)}</small>` : ""}</span><span class="meta">${whoSelect(t.id, t.who)}${catTag(t.cat)}
-    <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? esc(fmt(parse(t.due)) + hm(t.time)) : ""}</span>${t.due && !t.done ? `<button class="mini" data-snooze="${esc(t.id)}" title="Reporter d'une semaine">+1 sem.</button>` : ""}</span>
+    <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? (t.due < today && !t.done ? "⚠ en retard · " : "") + esc(fmt(parse(t.due)) + hm(t.time)) : ""}</span>${t.due && !t.done ? `<button class="mini" data-snooze="${esc(t.id)}" title="Reporter d'une semaine">+1 sem.</button>` : ""}</span>
     <button data-del="${esc(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button></li>`).join("") : `<li class="muted">${empty}</li>`;
   const s = suggestions();
   document.getElementById("sugg").hidden = !s.length;
   document.getElementById("suggCount").textContent = s.length ? `(${s.length})` : "";
-  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}${x.note ? `<small class="note">${esc(x.note)}</small>` : ""}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${esc(fmt(parse(x.due)))}</span></span><span class="acts"><button data-s="${i}">Ajouter</button>${x.plan ? `<button data-p="${i}" title="Noter la solution trouvée">Organisé</button>` : ""}<button class="mini" data-x="${i}" title="Écarter : ne pas le faire ou déjà réglé">Écarter</button></span></li>`).join("");
+  // Les suggestions à moins de 30 jours d'abord ; les autres sont repliées (« N autres, plus tard ») pour ne pas noyer la liste
+  const sugLi = (x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}${x.note ? `<small class="note">${esc(x.note)}</small>` : ""}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${esc(fmt(parse(x.due)))}</span></span><span class="acts"><button data-s="${i}">Ajouter à mes tâches</button>${x.plan ? `<button data-p="${i}" title="Noter la solution trouvée">Garde trouvée…</button>` : ""}<button class="mini" data-x="${i}" title="Ignorer : ne pas le faire, ou déjà réglé">Ignorer</button></span></li>`;
+  const horizon = addDays(today, 30), nearIdx = [], laterIdx = [];
+  s.forEach((x, i) => (x.due <= horizon || x.late ? nearIdx : laterIdx).push(i));
+  document.getElementById("suggList").innerHTML = nearIdx.map(i => sugLi(s[i], i)).join("") || `<li class="muted">Rien à proposer pour les 30 prochains jours.</li>`;
+  document.getElementById("suggLaterBox").hidden = !laterIdx.length;
+  document.getElementById("suggLaterSum").textContent = `${laterIdx.length} autre${laterIdx.length > 1 ? "s" : ""}, plus tard`;
+  document.getElementById("suggLater").innerHTML = laterIdx.map(i => sugLi(s[i], i)).join("");
   window._s = s;
   const o = outings();
   document.getElementById("out").hidden = !o.length;
@@ -346,6 +356,9 @@ document.getElementById("importFile").onchange = async e => {
 document.getElementById("syncForm").onsubmit = e => { e.preventDefault(); taskSync.setConfig(syncUrl.value, syncKey.value); syncKey.value = ""; runSync(); };
 document.getElementById("syncOff").onclick = () => { taskSync.disable(); syncUrl.value = ""; setState("(désactivée)"); };
 const cfg = taskSync.config(); if (cfg) syncUrl.value = cfg.url;
+function focusNewTask() { const b = document.getElementById("addBox"); b.open = true; b.scrollIntoView({ block: "center" }); document.getElementById("title").focus({ preventScroll: true }); }
+if (location.hash === "#new-task") focusNewTask();
+addEventListener("hashchange", () => { if (location.hash === "#new-task") focusNewTask(); });
 render();
 runSync();
 setInterval(runSync, 60000);

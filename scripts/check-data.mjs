@@ -137,7 +137,7 @@ if (!errors.length) {
 // Publication : toutes les pages à la racine doivent être copiées par le workflow de déploiement (sinon le lien du menu est mort en ligne)
 try {
   const deploy = readFileSync(".github/workflows/deploy-cloudflare.yml", "utf8");
-  readdirSync(".").filter(f => f.endsWith(".html")).forEach(f => { if (!deploy.includes(f)) err(".github/workflows/deploy-cloudflare.yml", `la page ${f} n'est pas copiée dans le site publié`); });
+  readdirSync(".").filter(f => f.endsWith(".html") || f === "sw.js").forEach(f => { if (!deploy.includes(f)) err(".github/workflows/deploy-cloudflare.yml", `la page ${f} n'est pas copiée dans le site publié`); });
 } catch (e) { /* workflow absent : rien à contrôler */ }
 
 // Péremption : prévenir bien avant la rentrée suivante

@@ -405,10 +405,20 @@ function renderStatus() {
   el.innerHTML = healthMessages().map(m => `<p class="alert ${m.lvl === "bad" ? "" : "warn"}" role="status">${esc(m.text)}</p>`).join("");
 }
 
+// Barre d'onglets en bas de l'écran (au pouce) : Planning, Tâches, Vacances. « Semaine type » est un lien secondaire (depuis la vue Semaine) ;
+// le bouton ＋ propose d'ajouter un événement ou une tâche depuis n'importe quelle page.
 function nav(active) {
-  const n = lateCount(), link = (href, id, label) => `<a href="${href}" class="${active === id ? "on" : ""}">${label}</a>`;
-  document.querySelector("header").insertAdjacentHTML("beforeend",
-    `<nav>${link("index.html", "p", "Planning")}${link("semaine.html", "s", "Semaine type")}${link("vacances.html", "v", "Vacances")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}</span>` : ""}`)}</nav>`);
+  if (active === "s") active = "p"; // la semaine type dépend du Planning
+  const n = lateCount(), link = (href, id, label) => `<a href="${href}" class="${active === id ? "on" : ""}"${active === id ? ' aria-current="page"' : ""}>${label}</a>`;
+  document.body.insertAdjacentHTML("beforeend",
+    `<nav class="tabs" aria-label="Pages">${link("index.html", "p", "Planning")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}<span class="sr"> en retard</span></span>` : ""}`)}${link("vacances.html", "v", "Vacances")}<button type="button" id="fabBtn" class="plus" aria-label="Ajouter un événement ou une tâche" aria-expanded="false">＋</button></nav>
+    <div class="fabmenu" id="fabMenu" hidden><a href="index.html#new-event">＋ Événement</a><a href="taches.html#new-task">＋ Tâche</a></div>`);
+  const menu = document.getElementById("fabMenu"), btn = document.getElementById("fabBtn");
+  btn.onclick = () => { menu.hidden = !menu.hidden; btn.setAttribute("aria-expanded", String(!menu.hidden)); };
+  menu.addEventListener("click", () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); });
+  document.addEventListener("click", e => { if (!e.target.closest("#fabMenu, #fabBtn")) { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); } });
   const bar = document.createElement("div"); bar.id = "statusBar"; bar.className = "statusbar"; document.querySelector("header").after(bar);
   renderStatus();
+  // Hors ligne : une copie des pages est gardée (réseau d'abord, copie en secours) ; sans effet en ouverture de fichier.
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
 }

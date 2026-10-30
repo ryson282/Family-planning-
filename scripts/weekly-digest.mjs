@@ -30,7 +30,7 @@ if (todo.length) L.push("## À traiter", "", ...todo.map(t => `- ${t}`), "");
 
 // Jour par jour : garde, congés, changements et événements
 L.push("## Jour par jour", "");
-const T = m => run(`Sched.T(${m})`), LAB = { moi: "Enfants chez moi", autre: "Enfants chez l'autre parent", echange: "Jour d'échange" };
+const T = m => run(`Sched.T(${m})`), LAB = { moi: "Enfants chez Yves", autre: "Enfants chez l'autre parent", echange: "Jour de passage" };
 model.days.forEach(d => {
   const conges = run(`congesOn(${J(d.k)})`).map(c => `${c.name} (${names(c.persons.join(","))})`);
   L.push(`**${fmt(d.k)}** — ${[d.custody && LAB[d.custody] + (d.estimated ? " (estimé)" : ""), ...conges.map(c => "Congé : " + c)].filter(Boolean).join(" · ") || "rien de particulier"}`);

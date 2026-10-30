@@ -32,7 +32,7 @@
     <ul class="list" id="slots"></ul>
     <div class="more" id="slotsMore"></div>
     <details class="dact"><summary>Comment sont calculées les occasions ?</summary>
-      <p class="muted"><span class="occ occ-heures">Quelques heures</span> un soir de semaine, à partir de l'heure où vous êtes libres (activités d'Émilie, retour de Bruxelles, piscine, récupération de Louanne). <span class="occ occ-journee">Journée</span> un jour entier (un samedi ou un dimanche, ou un stage). <span class="occ occ-weekend">Week-end</span> le samedi et le dimanche, avec le vendredi soir. <span class="occ occ-escapade">Escapade</span> plusieurs jours de congé. Tout cela quand Adrian et Alixia sont chez l'autre parent, occupés par un stage, ou (« garde à confirmer ») chez vous avec Louanne ou Lukas à la maison. Les soirs où quelque chose est déjà prévu sont masqués ou signalés.</p>
+      <p class="muted"><span class="occ occ-heures">Quelques heures</span> un soir de semaine, à partir de l'heure où vous êtes libres (activités d'Émilie, retour de Bruxelles, piscine, récupération de Louanne). <span class="occ occ-journee">Journée</span> un jour entier (un samedi ou un dimanche, un jour férié en semaine, ou un stage). <span class="occ occ-weekend">Week-end</span> le samedi et le dimanche, avec le vendredi soir. <span class="occ occ-escapade">Escapade</span> plusieurs jours de congé. Tout cela quand Adrian et Alixia sont chez l'autre parent, occupés par un stage, ou (« garde à confirmer ») chez vous avec Louanne ou Lukas à la maison. Les soirs où quelque chose est déjà prévu sont masqués ou signalés.</p>
     </details>
   </section>
   <section class="card" id="plannedBox" hidden>
@@ -140,7 +140,9 @@ function occasions() {
     const m = eveningStart(k); if (m === null || takenOut.has(k)) return;
     out.push({ type: "heures", date: k, end: "", time: hhmm(Math.max(m, 19 * 60)), care, fete: fete(k), warn: mention(busy(k).filter(({ s }) => s[1] > m)), label: dayLong(k), sub: `libres dès ${clock(m)}, environ ${hours(m)} h` });
   };
-  const journee = k => { if (k >= t && dayFree(k)) out.push({ type: "journee", date: k, end: "", time: "", care: false, fete: fete(k), warn: "", label: dayLong(k), sub: "libres toute la journée" }); };
+  // Jour férié officiel (Armistice, lundi de Pâques, Ascension…) en semaine : Yves et Émilie ne travaillent pas, et Adrian et Alixia sont chez l'autre parent
+  const ferie = k => (window.SCHOOL_HOLIDAYS || []).some(h => h.type === "ferie" && inRange(k, h.start, h.end));
+  const journee = (k, holiday) => { if (k >= t && dayFree(k)) { out.push({ type: "journee", date: k, end: "", time: "", care: false, fete: holiday ? "" : fete(k), warn: "", label: dayLong(k), sub: holiday ? `jour férié : ${off.get(k)}, Adrian et Alixia chez l'autre parent : libres toute la journée` : "libres toute la journée" }); return true; } return false; };
   outingWindows(t, horizon).forEach(w => {
     if (w.kind !== "absents") {                                       // stage ou garde organisée : journées libres
       const free = []; for (let k = w.start; k <= w.end; k = addDays(k, 1)) if (parse(k).getDay() % 6 !== 0 && dayFree(k)) free.push(k);
@@ -162,6 +164,7 @@ function occasions() {
     for (let k = w.start; k <= w.end; k = addDays(k, 1)) {
       const d = parse(k).getDay();
       if (d === 6 || d === 0) { if (!(d === 6 && k < w.end) && !(d === 0 && addDays(k, -1) >= w.start)) journee(k); continue; }  // samedi ou dimanche isolé
+      if (ferie(k) && journee(k, true)) continue;                                   // jour férié en semaine : journée entière (la soirée est comprise)
       if (!usedFri.has(k)) evening(k, false);
     }
   });

@@ -1,5 +1,5 @@
 // Outils iCalendar (RFC 5545) partagés par les scripts : échappement, pliage des lignes, événements, alarmes.
-export const icsText = t => String(t).replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+export const icsText = t => String(t).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 // Pliage à 75 octets (UTF-8), les lignes suivantes commencent par une espace.
 export function fold(line) {
   const enc = new TextEncoder(), parts = []; let cur = "", limit = 75;
@@ -23,7 +23,7 @@ export function vevent({ uid, date, end, time, timeEnd, summary, description, al
   const out = ["BEGIN:VEVENT", `UID:${uid}@family-planning`, `DTSTAMP:${stamp()}`];
   if (time) {
     const hm = t => t.replace(":", "") + "00";
-    out.push(`DTSTART:${ymd(date)}T${hm(time)}`, `DTEND:${ymd(end && !timeEnd ? end : date)}T${hm(timeEnd || time)}`);
+    out.push(`DTSTART:${ymd(date)}T${hm(time)}`, `DTEND:${ymd(end || date)}T${hm(timeEnd || time)}`);
   } else out.push(`DTSTART;VALUE=DATE:${ymd(date)}`, `DTEND;VALUE=DATE:${ymd(addDay(end || date))}`);
   out.push(`SUMMARY:${icsText(summary)}`);
   if (description) out.push(`DESCRIPTION:${icsText(description)}`);

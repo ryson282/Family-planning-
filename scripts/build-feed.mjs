@@ -10,7 +10,9 @@ const out = process.argv[2] || "dist", token = process.env.FEED_TOKEN || "";
 if (token.length < 16) { console.log("::warning::FEED_TOKEN absent ou trop court (16 caractères minimum) : flux iCal non généré."); process.exit(0); }
 if (!/^[A-Za-z0-9_-]+$/.test(token)) { console.error("FEED_TOKEN ne doit contenir que des lettres, chiffres, - et _."); process.exit(1); }
 
-const { ctx, run, stored, today, names } = await loadSite();
+const { ctx, run, stored, recordsOk, today, names } = await loadSite();
+// Base illisible : on ne publie pas un flux sans les tâches (Google Agenda retirerait les rappels). L'ancien flux reste en place.
+if (!recordsOk && !process.env.FEED_DRY_RUN) { console.error("::error::Base Supabase illisible : flux iCal non généré (le précédent reste valable)."); process.exit(1); }
 const horizon = 400, limit = run(`addDays(${JSON.stringify(today)}, ${horizon})`);
 const events = [];
 const TITLES = { moi: "Garde A² chez Yves", autre: "A² chez Emeline", echange: "Jour d'échange A²" }; // le prénom n'apparaît que dans ce flux privé (comme l'export de garde)
@@ -42,21 +44,41 @@ run(`allEvents()`).filter(e => e.source === "École" && e.end >= today && e.date
   events.push(vevent({ uid: `ecole-${e.date}-${e.title}`.replace(/[^\w-]+/g, "_"), date: e.date, end: e.end, time: e.time || undefined, timeEnd: e.time ? e.timeEnd || undefined : undefined, summary, description: [e.todo, e.amount, e.note].filter(Boolean).join(" — "), alarms }));
 });
 
-// 4. Tâches avec échéance (non terminées, non écartées) ; celles en retard se représentent chaque jour jusqu'à ce qu'elles soient faites
+// 3 bis. Événements saisis dans le site (rendez-vous, sorties, déplacements) : alarme 1 h avant, ou la veille à 18 h pour une journée entière
+run(`allEvents()`).filter(e => e.rec && e.end >= today && e.date <= limit).forEach(e => {
+  const who = names(e.person), summary = e.title + (who ? ` (${who})` : "");
+  const alarms = [e.time ? alarmBefore(60, summary) : alarmAllDay(1, 18, `Demain : ${summary}`)];
+  events.push(vevent({ uid: `site-${e.rec}`, date: e.date, end: e.end, time: e.time || undefined, timeEnd: e.time ? e.endTime || undefined : undefined, summary, description: e.note, alarms, transparent: !e.time }));
+});
+
+// 4. Tâches avec échéance (non terminées, non écartées) ; celles en retard se représentent chaque jour jusqu'à ce qu'elles soient faites.
+// Une tâche tôt le matin reçoit aussi une alarme la veille à 18 h. Un flux par personne : ses tâches et celles « à attribuer ».
 const tasks = stored.filter(t => !t.kind && !t.done && !t.dismissed && t.due);
-tasks.forEach(t => {
+const taskEvents = who => tasks.filter(t => !who || t.who === who || t.who === "famille").flatMap(t => {
   const late = t.due < today, date = late ? today : t.due;
-  if (date > limit) return;
+  if (date > limit) return [];
   const label = `${late ? "En retard : " : "À faire : "}${t.title}`;
-  const alarms = t.time ? [alarmBefore(60, label)] : [alarmAllDay(1, 18, `Demain : ${t.title}`), alarmAllDay(0, 8, label)];
-  events.push(vevent({ uid: `tache-${t.id}`, date, time: late ? undefined : t.time, timeEnd: undefined, summary: label, description: names(t.who) ? `Pour : ${names(t.who)}` : "", alarms, transparent: true }));
+  const alarms = t.time && !late ? [alarmBefore(60, label), ...(t.time < "10:00" ? [alarmAllDay(1, 18, `Demain ${t.time.replace(":", " h ")} : ${t.title}`)] : [])] : [alarmAllDay(1, 18, `Demain : ${t.title}`), alarmAllDay(0, 8, label)];
+  return [vevent({ uid: `tache-${t.id}`, date, time: late ? undefined : t.time, timeEnd: undefined, summary: label, description: names(t.who) ? `Pour : ${names(t.who)}` : "", alarms, transparent: true })];
 });
 const known = new Set(stored.filter(t => !t.kind).map(t => t.title));
 
-// 5. Rappels annuels (tâches annuelles et échéances du foyer) pas encore ajoutés à la liste
+// 4 bis. Événements saisis dans le site (rendez-vous, sorties, déplacements) : alarme 1 h avant (et la veille à 18 h avant 10 h),
+// ou la veille à 18 h pour une journée entière ; « Me prévenir » ajoute un rappel 1, 2 ou 7 jours avant.
+run(`allEvents()`).filter(e => e.rec && e.end >= today && e.date <= limit).forEach(e => {
+  const who = names(e.person), summary = e.title + (who ? ` (${who})` : ""), rec = stored.find(r => String(r.id) === String(e.rec)) || {};
+  const alarms = e.time ? [alarmBefore(60, summary), ...(e.time < "10:00" ? [alarmAllDay(1, 18, `Demain ${e.time.replace(":", " h ")} : ${summary}`)] : [])] : [alarmAllDay(1, 18, `Demain : ${summary}`)];
+  const n = Number(rec.remind) || 0; if (n > 1 || (n === 1 && e.time)) alarms.push(alarmAllDay(n, 18, `Dans ${n} jours : ${summary}`));
+  events.push(vevent({ uid: `site-${e.rec}`, date: e.date, end: e.end, time: e.time || undefined, timeEnd: e.time ? e.endTime || undefined : undefined, summary, description: e.note, alarms, transparent: !e.time }));
+});
+
+// 5. Rappels annuels (tâches annuelles et échéances du foyer) pas encore ajoutés à la liste : placés À L'ÉCHÉANCE, avec des alarmes à
+// J-30 (si l'anticipation le permet), J-14, J-7 et la veille ; une date dépassée (période de grâce) rappelle chaque jour.
 run(`annualTasks(${JSON.stringify(today)}, { all: true })`).filter(a => !known.has(a.title) && a.start <= limit).forEach(a => {
-  const days = Math.min(a.lead || 14, 14);
-  events.push(vevent({ uid: `annuel-${a.title}`.replace(/[^\w-]+/g, "_"), date: a.start, summary: `Rappel : ${a.title}`, description: [names(a.who) && `Pour : ${names(a.who)}`, a.note].filter(Boolean).join(" — "), alarms: [alarmAllDay(days, 9, `Dans ${days} jours : ${a.title}`), alarmAllDay(1, 18, `Demain : ${a.title}`)] }));
+  const target = a.target || a.start, late = target < today, date = late ? today : target, alarms = [];
+  if (late) alarms.push(alarmAllDay(0, 9, `Date dépassée : ${a.title}`));
+  else [30, 14, 7, 1].filter(o => o <= Math.max(a.lead || 14, 14) && run(`addDays(${JSON.stringify(target)}, ${-o})`) >= today).forEach(o => alarms.push(alarmAllDay(o, o === 1 ? 18 : 9, o === 1 ? `Demain : ${a.title}` : `Dans ${o} jours : ${a.title}`)));
+  events.push(vevent({ uid: `annuel-${a.title}`.replace(/[^\w-]+/g, "_"), date, summary: `${late ? "Date dépassée : " : "Rappel : "}${a.title}`, description: [names(a.who) && `Pour : ${names(a.who)}`, a.note].filter(Boolean).join(" — "), alarms }));
 });
 
 // 6. Alertes « à organiser » : garde de A² pendant un congé, garde de Lana ; se représentent chaque jour jusqu'à ce que ce soit réglé
@@ -66,8 +88,8 @@ run(`childcareGaps().filter(g => g.end >= ${JSON.stringify(today)} && g.start <=
   const label = `⚠ Garde de A² à organiser : ${g.start === g.end ? fmtDay(g.start) : `du ${fmtDay(g.start)} au ${fmtDay(g.end)}`} (${g.holiday.replace(/ \(.*\)/, "")})`;
   events.push(vevent({ uid: `alerte-garde-${g.start}`, date, summary: label, alarms: [alarmAllDay(0, 9, label)] }));
 });
-(ctx.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today && a.start <= run(`addDays(${JSON.stringify(today)}, 42)`)).forEach(a => {
-  const date = run(`addDays(${JSON.stringify(a.start)}, -21)`) > today ? run(`addDays(${JSON.stringify(a.start)}, -21)`) : today;
+(ctx.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today && a.start <= run(`addDays(${JSON.stringify(today)}, 60)`)).forEach(a => {
+  const date = run(`addDays(${JSON.stringify(a.start)}, -30)`) > today ? run(`addDays(${JSON.stringify(a.start)}, -30)`) : today;
   const label = `⚠ Qui garde Lana ? ${fmtDay(a.start)} au ${fmtDay(a.end)}`;
   events.push(vevent({ uid: `alerte-lana-${a.start}`, date, summary: label, alarms: [alarmAllDay(0, 9, label)] }));
 });
@@ -78,6 +100,9 @@ run(`childcareGaps().filter(g => g.end >= ${JSON.stringify(today)} && g.start <=
 
 const dir = `${out}/ics/${token}`;
 mkdirSync(dir, { recursive: true });
-writeFileSync(`${dir}/famille.ics`, calendar("Famille (rappels)", events));
+writeFileSync(`${dir}/famille.ics`, calendar("Famille (rappels)", [...events, ...taskEvents("")]));
+// Flux personnels : mêmes événements, mais seulement les tâches de la personne (et celles à attribuer)
+writeFileSync(`${dir}/yves.ics`, calendar("Yves (rappels)", [...events, ...taskEvents("moi")]));
+writeFileSync(`${dir}/emilie.ics`, calendar("Émilie (rappels)", [...events, ...taskEvents("emilie")]));
 appendFileSync(`${out}/_headers`, "\n/ics/*\n  X-Robots-Tag: noindex, nofollow\n  Cache-Control: no-store\n");
-console.log(`Flux iCal : ${events.length} événements -> ${dir}/famille.ics`);
+console.log(`Flux iCal : ${events.length + taskEvents("").length} événements -> ${dir}/famille.ics (+ yves.ics, emilie.ics)`);

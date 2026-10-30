@@ -2,7 +2,7 @@
 // Usage : node scripts/weekly-digest.mjs > digest.md   (publié le dimanche en « issue » GitHub et, si configuré, par e-mail)
 import { loadSite } from "./lib-site.mjs";
 
-const { run, J, stored, today, names } = await loadSite();
+const { run, J, stored, recordsOk, today, names } = await loadSite();
 const fmt = k => run(`fmt(parse(${J(k)}))`), add = (k, n) => run(`addDays(${J(k)}, ${n})`);
 const range = (a, b) => (a === b ? fmt(a) : `du ${fmt(a)} au ${fmt(b)}`);
 // La semaine qui vient : le lundi suivant (un dimanche), sinon le lundi de la semaine en cours si on est lundi.
@@ -12,6 +12,10 @@ const model = run(`WeekView.model(${J(monday)}, allEvents(), Object.fromEntries(
 const tasks = stored.filter(t => !t.kind && !t.done && !t.dismissed);
 const L = [];
 L.push(`# Semaine du ${fmt(monday)} au ${fmt(sunday)}`, "");
+if (!recordsOk) L.push("> ⚠ **Les tâches n'ont pas pu être lues** (base de synchronisation injoignable) : ce récapitulatif ne mentionne ni tâches ni retards. Ne pas en conclure que tout est en ordre.", "");
+// Ce qui peut rendre le planning faux sans bruit : agenda non synchronisé, données qui s'arrêtent, horaires périmés
+const health = run(`healthMessages(${J(today)})`).filter(m => !/non envoyée|pas encore envoyée/.test(m.text));
+if (health.length) L.push("## Données à vérifier", "", ...health.map(m => `- ${m.text}`), "");
 
 // À traiter
 const todo = [];
@@ -26,7 +30,7 @@ if (todo.length) L.push("## À traiter", "", ...todo.map(t => `- ${t}`), "");
 
 // Jour par jour : garde, congés, changements et événements
 L.push("## Jour par jour", "");
-const T = m => run(`Sched.T(${m})`), LAB = { moi: "Enfants chez moi", autre: "Enfants chez l'autre parent", echange: "Jour d'échange" };
+const T = m => run(`Sched.T(${m})`), LAB = { moi: "Enfants chez Yves", autre: "Enfants chez l'autre parent", echange: "Jour de passage" };
 model.days.forEach(d => {
   const conges = run(`congesOn(${J(d.k)})`).map(c => `${c.name} (${names(c.persons.join(","))})`);
   L.push(`**${fmt(d.k)}** — ${[d.custody && LAB[d.custody] + (d.estimated ? " (estimé)" : ""), ...conges.map(c => "Congé : " + c)].filter(Boolean).join(" · ") || "rien de particulier"}`);

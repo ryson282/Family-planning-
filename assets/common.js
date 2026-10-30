@@ -90,14 +90,33 @@ function houseEmptyOn(day) {
   return (window.HOUSE_EMPTY || []).find(a => inRange(day, a.start, a.end));
 }
 
+// Événements scolaires du fichier + jours sans école saisis dans le site (journée pédagogique, grève : traités comme « Congé : … »).
+function schoolEventsAll() {
+  const own = (window.USER_EVENTS || []).filter(r => r.noschool).map(r => ({ date: r.date, end: r.end || r.date, title: "Congé : " + r.title, person: r.person || KIDS.join(",") }));
+  return [...(window.SCHOOL_EVENTS || []), ...own];
+}
+// Jours d'école (ou de cours) manqués par une absence : jours de semaine où la personne n'est pas déjà en congé.
+function schoolDaysMissed(start, end, persons) {
+  const ids = String(persons || "").split(",").filter(p => STUDENTS.includes(p)), out = [];
+  ids.forEach(id => {
+    const days = [];
+    for (let k = start; k <= end && days.length < 40; k = addDays(k, 1)) {
+      const d = parse(k).getDay();
+      if (d === 0 || d === 6 || congesOn(k).some(c => c.persons.includes(id))) continue;
+      days.push(k);
+    }
+    if (days.length) out.push({ person: id, days });
+  });
+  return out;
+}
 // Jours fériés et congés isolés (Armistice, lundi de Pâques, « Congé : Mardi gras » des événements scolaires...).
 function daysOff() {
   const seen = new Set(), out = [];
-  const push = (date, name) => { if (!seen.has(date)) { seen.add(date); out.push({ date, name }); } };
+  const push = (date, name, src) => { if (!seen.has(date)) { seen.add(date); out.push({ date, name, src }); } };
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "ferie").forEach(h => {
-    for (let k = h.start; k <= h.end; k = addDays(k, 1)) push(k, h.name);
+    for (let k = h.start; k <= h.end; k = addDays(k, 1)) push(k, h.name, h.src);
   });
-  (window.SCHOOL_EVENTS || []).filter(e => /^Congé : /.test(e.title)).forEach(e => push(e.date, e.title.replace(/^Congé : /, "")));
+  schoolEventsAll().filter(e => /^Congé : /.test(e.title)).forEach(e => { for (let k = e.date; k <= (e.end || e.date); k = addDays(k, 1)) push(k, e.title.replace(/^Congé : /, "")); });
   return out;
 }
 
@@ -208,7 +227,7 @@ function congePeriods() {
     if (h.type === "vacances") out.push({ name: h.name, start: h.start, end: h.end, persons: KIDS });
     else if (h.type === "ferie") out.push({ name: h.name, start: h.start, end: h.end, persons: STUDENTS }); // l'ULiège suspend aussi ses activités
   });
-  (window.SCHOOL_EVENTS || []).forEach(e => {
+  schoolEventsAll().forEach(e => {
     if (/^Congé : /.test(e.title)) out.push({ name: e.title.replace(/^Congé : /, ""), start: e.date, end: e.end || e.date, persons: String(e.person).split(",") });
     else if (e.person === "louanne" && /^ULiège : (vacances|congé)/.test(e.title)) out.push({ name: e.title.replace(/^ULiège : /, ""), start: e.date, end: e.end || e.date, persons: ["louanne"] });
   });
@@ -287,6 +306,8 @@ function allEvents() {
       person: named ? named.person : (window.CALENDAR_OWNERS || {})[e.calendar], time: e.allDay ? "" : e.start.slice(11, 16),
       timeEnd: !e.allDay && end.slice(0, 10) === e.start.slice(0, 10) ? end.slice(11, 16) : "" });
   });
+  // Événements saisis dans le site (assets/records.js) : le champ person liste les personnes concernées (vide = toute la famille).
+  (window.USER_EVENTS || []).forEach(r => out.push({ date: r.date, end: r.end && r.end >= r.date ? r.end : r.date, title: r.title, source: "Site", person: r.person || "", time: r.time || "", timeEnd: r.time && r.timeEnd && (!r.end || r.end === r.date) ? r.timeEnd : "", note: r.note || "", endTime: r.time && r.timeEnd ? r.timeEnd : "", rec: r.id }));
   (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.end || e.date, title: e.title, source: "École", person: e.person, time: e.time || "", timeEnd: "", todo: e.todo, amount: e.amount, needsParent: e.needsParent, note: e.note }));
   return out;
 }
@@ -306,31 +327,33 @@ function schoolTodos(today, { all = false, lead = 30 } = {}) {
 // Tâches annuelles (data/recurring-tasks.js) et échéances propres au foyer (enregistrements « deadline ») : prochaine occurrence encore à faire.
 // all = true : toutes, même hors de leur fenêtre d'anticipation (flux iCal). Sinon seulement celles à moins de `lead` jours.
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+// Une occurrence dépassée reste proposée pendant `grace` jours (30 par défaut) : sinon un entretien oublié disparaîtrait sans trace le lendemain.
+const GRACE_DAYS = 30;
 function nextOccurrence(r, today) {
-  const y0 = +today.slice(0, 4);
-  for (let y = y0; y <= y0 + 12; y++) {
+  const y0 = +today.slice(0, 4), grace = r.grace === undefined ? GRACE_DAYS : r.grace;
+  for (let y = y0 - 1; y <= y0 + 12; y++) {
     if (r.every && (y - (r.from || 0)) % r.every !== 0) continue;
     const start = iso(new Date(y, r.month - 1, r.day || 1)), end = r.day ? start : iso(new Date(y, r.month, 0));
-    if (end >= today) return { start, year: y, due: start < today ? today : start };
+    if (addDays(end, grace) >= today) return { start, end, year: y, due: start < today ? today : start, late: end < today };
   }
   return null;
 }
 function annualTasks(today, { all = false } = {}) {
   const out = [];
   (window.RECURRING_TASKS || []).forEach(r => {
-    const o = nextOccurrence(r, today), lead = r.lead || 60;
+    const o = nextOccurrence(r, today), lead = r.lead === undefined ? 60 : r.lead;
     if (!o || (!all && o.start > addDays(today, lead))) return;
     const when = r.day ? `${r.day} ${MONTHS_FR[r.month - 1]}` : MONTHS_FR[r.month - 1];
-    out.push({ title: `${r.title}${r.check ? " (à vérifier)" : ""} (${when} ${o.year})`, cat: r.cat, who: r.who, due: o.due, start: o.start, lead, until: addDays(o.due, 60), recurring: true, note: r.note });
+    out.push({ title: `${r.title}${r.check ? " (à vérifier)" : ""} (${when} ${o.year})`, cat: r.cat, who: r.who, due: o.due, start: o.start, target: o.end, lead, until: addDays(o.end, 60), recurring: true, note: o.late ? [r.note, "date dépassée : à faire dès que possible"].filter(Boolean).join(" — ") : r.note });
   });
   (window.HOUSEHOLD_DEADLINES || []).forEach(d => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date || "")) return;
     let date = d.date;
     for (let i = 0; i < 40 && date < today && d.every; i++) date = iso(new Date(+date.slice(0, 4) + d.every, +date.slice(5, 7) - 1, +date.slice(8)));
     if (date < today) return;
-    const lead = d.lead || 60;
+    const lead = d.lead === undefined ? 60 : d.lead;
     if (!all && date > addDays(today, lead)) return;
-    out.push({ title: `${d.title} (${fmt(parse(date))} ${date.slice(0, 4)})`, cat: d.cat || "Administratif", who: d.who || "famille", due: date, start: date, lead, until: addDays(date, 60), recurring: true, note: d.note, deadline: d.id });
+    out.push({ title: `${d.title} (${fmt(parse(date))} ${date.slice(0, 4)})`, cat: d.cat || "Administratif", who: d.who || "famille", due: date, start: date, target: date, lead, until: addDays(date, 60), recurring: true, note: d.note, deadline: d.id });
   });
   return out;
 }
@@ -355,8 +378,47 @@ function lateCount() {
     return (JSON.parse(localStorage.getItem("family-tasks-v1") || "[]") || []).filter(x => x && !x.kind && !x.done && !x.dismissed && x.due && x.due < t).length;
   } catch (e) { return 0; }
 }
+// Bandeau d'état en haut de chaque page : ce qui peut rendre le planning faux sans que personne ne le voie
+// (modifications non envoyées, agenda non synchronisé, données qui s'arrêtent, horaires périmés).
+function healthMessages(today = iso(new Date())) {
+  const out = [], days = n => `${n} jour${n > 1 ? "s" : ""}`, ago = d => Math.floor((Date.parse(today + "T12:00:00") - Date.parse(String(d).slice(0, 10) + "T12:00:00")) / 86400000);
+  if (typeof taskSync !== "undefined" && taskSync.config()) {
+    const n = taskSync.pending();
+    if (n) out.push({ lvl: "warn", text: n > 1 ? `⚠ ${n} modifications pas encore envoyées aux autres appareils : elles partiront dès que la connexion revient.` : "⚠ 1 modification pas encore envoyée aux autres appareils : elle partira dès que la connexion revient." });
+    if (taskSync.note) out.push({ lvl: "warn", text: taskSync.note });
+  }
+  const agendas = window.CALENDAR_AGENDAS || {}, names = Object.keys(agendas);
+  const stale = (names.length ? names.map(n => ({ n, d: agendas[n] })) : window.CALENDAR_UPDATED ? [{ n: "", d: window.CALENDAR_UPDATED }] : []).filter(x => ago(x.d) >= 3);
+  stale.forEach(x => out.push({ lvl: "bad", text: `⚠ ${x.n ? "L'agenda « " + calendarLabel(x.n) + " »" : "Les agendas"} n'a pas été synchronisé depuis ${days(ago(x.d))} : les changements de garde récents peuvent manquer.` }));
+  const lastEv = (window.SCHOOL_EVENTS || []).filter(e => e.person !== "louanne").map(e => e.end || e.date).sort().pop();
+  if (lastEv && lastEv < addDays(today, 120)) out.push({ lvl: "warn", text: `Événements scolaires connus jusqu'au ${fmt(parse(lastEv))} ${lastEv.slice(0, 4)} : à compléter pour la suite.` });
+  const custody = (window.CALENDAR_EVENTS || []).filter(isCustodyEvent).map(e => e.start.slice(0, 10)).sort().pop();
+  if (custody && custody < addDays(today, 60)) out.push({ lvl: "warn", text: `Garde réelle connue jusqu'au ${fmt(parse(custody))} ${custody.slice(0, 4)} : la suite est estimée d'après le rythme habituel.` });
+  const valid = window.SCHEDULES && window.SCHEDULES.validUntil;
+  if (valid && today > addDays(valid, -60)) out.push({ lvl: today > valid ? "bad" : "warn", text: `Horaires de la semaine type valables jusqu'au ${fmt(parse(valid))} ${valid.slice(0, 4)} : à revoir pour la rentrée (classes, horaires, activités).` });
+  const lastHol = (window.SCHOOL_HOLIDAYS || []).map(h => h.end).sort().pop();
+  if (lastHol && lastHol < addDays(today, 300)) out.push({ lvl: "warn", text: `Congés scolaires connus jusqu'au ${fmt(parse(lastHol))} ${lastHol.slice(0, 4)} : à compléter.` });
+  return out;
+}
+function renderStatus() {
+  const el = document.getElementById("statusBar"); if (!el) return;
+  el.innerHTML = healthMessages().map(m => `<p class="alert ${m.lvl === "bad" ? "" : "warn"}" role="status">${esc(m.text)}</p>`).join("");
+}
+
+// Barre d'onglets en bas de l'écran (au pouce) : Planning, Tâches, Vacances. « Semaine type » est un lien secondaire (depuis la vue Semaine) ;
+// le bouton ＋ propose d'ajouter un événement ou une tâche depuis n'importe quelle page.
 function nav(active) {
-  const n = lateCount(), link = (href, id, label) => `<a href="${href}" class="${active === id ? "on" : ""}">${label}</a>`;
-  document.querySelector("header").insertAdjacentHTML("beforeend",
-    `<nav>${link("index.html", "p", "Planning")}${link("semaine.html", "s", "Semaine type")}${link("vacances.html", "v", "Vacances")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}</span>` : ""}`)}</nav>`);
+  if (active === "s") active = "p"; // la semaine type dépend du Planning
+  const n = lateCount(), link = (href, id, label) => `<a href="${href}" class="${active === id ? "on" : ""}"${active === id ? ' aria-current="page"' : ""}>${label}</a>`;
+  document.body.insertAdjacentHTML("beforeend",
+    `<nav class="tabs" aria-label="Pages">${link("index.html", "p", "Planning")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}<span class="sr"> en retard</span></span>` : ""}`)}${link("vacances.html", "v", "Vacances")}<button type="button" id="fabBtn" class="plus" aria-label="Ajouter un événement ou une tâche" aria-expanded="false">＋</button></nav>
+    <div class="fabmenu" id="fabMenu" hidden><a href="index.html#new-event">＋ Événement</a><a href="taches.html#new-task">＋ Tâche</a></div>`);
+  const menu = document.getElementById("fabMenu"), btn = document.getElementById("fabBtn");
+  btn.onclick = () => { menu.hidden = !menu.hidden; btn.setAttribute("aria-expanded", String(!menu.hidden)); };
+  menu.addEventListener("click", () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); });
+  document.addEventListener("click", e => { if (!e.target.closest("#fabMenu, #fabBtn")) { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); } });
+  const bar = document.createElement("div"); bar.id = "statusBar"; bar.className = "statusbar"; document.querySelector("header").after(bar);
+  renderStatus();
+  // Hors ligne : une copie des pages est gardée (réseau d'abord, copie en secours) ; sans effet en ouverture de fichier.
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
 }

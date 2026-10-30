@@ -13,7 +13,7 @@
 <header><h1>Vacances</h1></header>
 <main>
   <section class="card">
-    <p style="margin:0">Chaque congé des deux prochaines années : quand partir (A² chez l'autre parent, Louanne libre), la garde de A² et de Lana, et vos décisions (on part, on reste, dates, réservations, budget). Ce que vous décidez ici retire les suggestions correspondantes des tâches et alimente le flux de rappels.</p>
+    <p style="margin:0">Pour chaque congé : quand partir (Adrian et Alixia chez l'autre parent, Louanne libre), la garde des enfants et de Lana, et votre décision. Ce que vous notez ici crée les tâches de préparation et les rappels.</p>
   </section>
   <div id="list"></div>
   <section class="card">
@@ -41,6 +41,12 @@ Records.apply();
 const today = () => iso(new Date());
 const dRange = (a, b) => (a === b ? fmt(parse(a)) : `du ${fmt(parse(a))} au ${fmt(parse(b))}`);
 const pname = ids => String(ids).split(",").map(i => ((PEOPLE.find(p => p.id === i) || {}).name || i).replace(/ \(.*\)/, "")).join(", ");
+
+// Source de la date (arrêté officiel, ou date calculée à confirmer) : permet de la vérifier.
+function srcNote(id) {
+  const s = (window.HOLIDAY_SOURCES || {})[id]; if (!s) return "";
+  return `<small class="note">Source : ${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>` : `<b>${esc(s.label)}</b>`}</small>`;
+}
 
 function holidays() {
   const t = today(), lim = addDays(t, 730);
@@ -91,13 +97,15 @@ function card(h, away, gaps, days) {
 function render() {
   const t = today(), aways = awayPeriods(), gaps = childcareGaps(), days = childcareDays();
   const hs = holidays();
-  document.getElementById("list").innerHTML = hs.map(h => card(h, aways.filter(a => a.hstart === h.start), gaps.filter(g => g.holiday === h.name && g.start >= h.start && g.end <= h.end), days.filter(d => d.holiday === h.name && d.date >= h.start && d.date <= h.end && d.date >= t))).join("") || `<section class="card muted">Aucun congé connu dans les deux prochaines années.</section>`;
+  const cards = hs.map(h => card(h, aways.filter(a => a.hstart === h.start), gaps.filter(g => g.holiday === h.name && g.start >= h.start && g.end <= h.end), days.filter(d => d.holiday === h.name && d.date >= h.start && d.date <= h.end && d.date >= t)));
+  // Les deux prochains congés en entier ; les suivants repliés (la plupart sont à plus d'un an)
+  document.getElementById("list").innerHTML = cards.slice(0, 2).join("") + (cards.length > 2 ? `<details class="card"><summary><b>${cards.length - 2} congés suivants</b></summary>${cards.slice(2).join("")}</details>` : "") || `<section class="card muted">Aucun congé connu dans les deux prochaines années.</section>`;
   // Ponts : jours fériés et congés isolés hors vacances, sur 12 mois
   const wd = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."], lim = addDays(t, 365);
   const rows = daysOff().filter(o => o.date >= t && o.date <= lim && !(window.SCHOOL_HOLIDAYS || []).some(h => h.type === "vacances" && o.date >= h.start && o.date <= h.end)).map(o => {
     const d = parse(o.date).getDay(), sat = addDays(o.date, { 1: -2, 2: -3, 4: 2, 5: 1, 3: 3, 6: 0, 0: -1 }[d]), where = custodyOn(sat); // week-end concerné : celui qui précède un lundi/mardi, suit un jeudi/vendredi
     const hint = d === 4 ? "pont possible le vendredi" : d === 2 ? "pont possible le lundi" : d === 1 || d === 5 ? "week-end de 3 jours" : d === 3 ? "en milieu de semaine" : "week-end";
-    return `<li class="item"><span class="t">${esc(o.name)} · ${esc(wd[d])} ${esc(fmt(parse(o.date)).replace(/^[^ ]+ /, ""))}<small class="note">${esc(hint)}${where ? " · " + (where === "autre" ? "A² chez l'autre parent ce week-end" : where === "moi" ? "A² chez Yves ce week-end" : "jour d'échange") : ""}</small></span></li>`;
+    return `<li class="item"><span class="t">${esc(o.name)} · ${esc(wd[d])} ${esc(fmt(parse(o.date)).replace(/^[^ ]+ /, ""))}<small class="note">${esc(hint)}${where ? " · " + (where === "autre" ? "A² chez l'autre parent ce week-end" : where === "moi" ? "A² chez Yves ce week-end" : "jour d'échange") : ""}</small>${srcNote(o.src)}</span></li>`;
   });
   document.getElementById("ponts").innerHTML = rows.join("") || `<li class="muted">Aucun.</li>`;
 }
@@ -108,11 +116,27 @@ document.getElementById("list").addEventListener("submit", async e => {
   const rec = { id: c.dataset.id, kind: "holiday", key: c.dataset.key, year: c.dataset.year, name: c.dataset.name, status: v("status"), from: v("from"), to: v("to"), dest: v("dest"), budget: v("budget"), lana: v("lana"),
     lodging: f.has("lodging"), transport: f.has("transport"), docs: f.has("docs"), mail: f.has("mail"), note: v("note") };
   if (rec.status === "part" && rec.from && rec.to && rec.to < rec.from) { form.querySelector(".flash").textContent = "La date de fin précède le début."; return; }
-  await Records.put(rec);
-  // « On part » avec dates et une personne pour Lana : la garde de Lana est notée (plus d'alerte)
-  if (rec.status === "part" && rec.from && rec.to && rec.lana) await Records.put({ id: `l${rec.from}${rec.to}`, kind: "house", start: rec.from, end: rec.to, sitter: rec.lana, note: "Vacances : " + (rec.dest || rec.name) });
+  const prev = (window.HOLIDAY_DECISIONS || {})[`${rec.key}:${rec.year}`];
+  let sent = await Records.put(rec);
+  // changement d'avis (« on reste », autres dates) : l'ancienne maison vide et les préparatifs ne valent plus
+  if (prev && prev.status === "part" && prev.from && (rec.status !== "part" || prev.from !== rec.from || prev.to !== rec.to)) {
+    await Records.remove(`l${prev.from}${prev.to}`);
+    if (rec.status !== "part") for (const id of ["vdocs", "vmail", "vlodg", "vtrans"]) await Records.remove(`${id}-${rec.id}`);
+  }
+  // « On part » avec dates : la maison est vide (Lana : alerte « sans solution » tant que personne n'est noté), et les préparatifs deviennent des tâches
+  // (documents d'identité à J-21, courrier et plantes à J-7) tant que les cases ne sont pas cochées.
+  if (rec.status === "part" && rec.from && rec.to) {
+    await Records.put({ id: `l${rec.from}${rec.to}`, kind: "house", start: rec.from, end: rec.to, sitter: rec.lana, note: "Vacances : " + (rec.dest || rec.name) });
+    const today = iso(new Date()), due = (n) => (addDays(rec.from, -n) < today ? today : addDays(rec.from, -n)), label = rec.dest || rec.name;
+    const prep = [["docs", "vdocs", `Vérifier les documents avant le départ (${label}) : cartes d'identité, Kids-ID, assurance voyage, carte européenne`, 21], ["mail", "vmail", `Courrier et plantes avant le départ (${label})`, 7],
+      ["lodging", "vlodg", `Hébergement à réserver (${label})`, 60], ["transport", "vtrans", `Transport à réserver (${label})`, 60]];
+    for (const [key, id, title, n] of prep) {
+      if (rec[key]) await Records.remove(`${id}-${rec.id}`);
+      else { const ex = Records.local().find(x => x.id === `${id}-${rec.id}`); await Records.put({ ...(ex || {}), id: `${id}-${rec.id}`, title, cat: "Vacances", who: ex ? ex.who : "moi", due: due(n), done: ex ? !!ex.done : false }); }
+    }
+  }
   render();
-  const again = document.querySelector(`.hol[data-id="${CSS.escape(c.dataset.id)}"] .flash`); if (again) again.textContent = "Enregistré ✓";
+  const again = document.querySelector(`.hol[data-id="${CSS.escape(c.dataset.id)}"] .flash`); if (again) again.textContent = sent ? "Enregistré ✓" : "Enregistré sur ce téléphone, pas encore envoyé aux autres appareils.";
 });
 document.getElementById("list").addEventListener("click", async e => {
   const b = e.target.closest("[data-clear]"); if (!b) return;
@@ -120,6 +144,7 @@ document.getElementById("list").addEventListener("click", async e => {
 });
 render();
 Records.refresh().then(changed => { if (changed) render(); });
+Records.watch(() => render());
 </script>
 </body>
 </html>

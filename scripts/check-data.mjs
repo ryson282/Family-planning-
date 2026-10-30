@@ -44,6 +44,24 @@ const types = new Set(["vacances", "ferie", "rentree"]);
 const hs = (W.SCHOOL_HOLIDAYS || []).filter(h => isDate(h.start));
 for (let i = 1; i < hs.length; i++) if (hs[i].start < hs[i - 1].start && hs[i].type !== "ferie" && hs[i - 1].type !== "ferie" && !/^(Rentrée|Fin)/.test(hs[i].name)) warn("data/school-holidays.js", `ordre non chronologique à « ${hs[i].name} »`);
 
+// Jours fériés légaux et congé du 27 septembre : recalculés (Pâques par l'algorithme de Meeus) ; un jour de semaine en période scolaire
+// qui n'est pas dans la liste est signalé, tant que la liste couvre l'année (de la première rentrée à la dernière fin des cours).
+{
+  const easter = y => { const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    return new Date(Date.UTC(y, Math.floor((h + l - 7 * m + 114) / 31) - 1, (h + l - 7 * m + 114) % 31 + 1)); };
+  const iso = d => d.toISOString().slice(0, 10), plus = (d, n) => new Date(d.getTime() + n * 864e5);
+  const rentrees = hs.filter(h => h.type === "rentree"), first = rentrees.length ? rentrees[0].start : "", last = (rentrees.filter(h => /^Fin/.test(h.name)).pop() || {}).start || "";
+  const vac = hs.filter(h => h.type === "vacances");
+  hs.filter(h => h.type === "ferie").forEach(h => { if (!(W.HOLIDAY_SOURCES || {})[h.src]) warn("data/school-holidays.js", `${h.name} (${h.start}) : source manquante ou inconnue (champ src)`); else if (h.src === "calc") warn("data/school-holidays.js", `${h.name} (${h.start}) : date calculée, à confirmer quand l'arrêté sera publié`); });
+  for (let y = +first.slice(0, 4); first && y <= +last.slice(0, 4); y++) {
+    const e = easter(y);
+    [["Lundi de Pâques", iso(plus(e, 1))], ["Fête du Travail", `${y}-05-01`], ["Ascension", iso(plus(e, 39))], ["Lundi de Pentecôte", iso(plus(e, 50))], ["Fête de la Communauté française", `${y}-09-27`], ["Armistice", `${y}-11-11`]].forEach(([n, d]) => {
+      if (d < first || d > last || [0, 6].includes(dow(d)) || vac.some(h => d >= h.start && d <= h.end)) return;
+      if (!hs.some(h => h.type === "ferie" && h.start <= d && h.end >= d)) warn("data/school-holidays.js", `jour férié manquant : ${n} (${d})`);
+    });
+  }
+}
+
 // Événements scolaires
 const seen = new Set();
 (W.SCHOOL_EVENTS || []).forEach((e, i) => {
@@ -119,7 +137,7 @@ if (!errors.length) {
 // Publication : toutes les pages à la racine doivent être copiées par le workflow de déploiement (sinon le lien du menu est mort en ligne)
 try {
   const deploy = readFileSync(".github/workflows/deploy-cloudflare.yml", "utf8");
-  readdirSync(".").filter(f => f.endsWith(".html")).forEach(f => { if (!deploy.includes(f)) err(".github/workflows/deploy-cloudflare.yml", `la page ${f} n'est pas copiée dans le site publié`); });
+  readdirSync(".").filter(f => f.endsWith(".html") || f === "sw.js").forEach(f => { if (!deploy.includes(f)) err(".github/workflows/deploy-cloudflare.yml", `la page ${f} n'est pas copiée dans le site publié`); });
 } catch (e) { /* workflow absent : rien à contrôler */ }
 
 // Péremption : prévenir bien avant la rentrée suivante

@@ -16,7 +16,7 @@
     <div id="homeAlerts" role="status"></div>
     <div id="homeToday"></div>
     <div id="homeTomorrow"></div>
-    <details open class="ahead"><summary><b>À anticiper</b></summary><ul class="list" id="homeAhead"></ul></details>
+    <details open class="ahead"><summary><b>À venir (14 jours)</b></summary><ul class="list" id="homeAhead"></ul><div class="more" id="homeMore"></div></details>
   </section>
   <section class="card">
     <div class="bar top">
@@ -36,7 +36,7 @@
         <div class="legend">
           <span><i style="background:var(--vac)"></i>Vacances scolaires (FWB)</span>
           <span><i style="background:var(--ferie)"></i>Jour férié ou congé (pas d'école)</span>
-          <span><i style="background:#4f9dff"></i>Enfants chez moi</span><span><i style="background:#b8bfcc"></i>Chez l'autre parent</span><span><i style="background:linear-gradient(90deg,#4f9dff,#b8bfcc)"></i>Échange</span><span>Barre pâle = garde estimée par règle</span><span>🐱 Maison vide</span><span>🧒 Garde de A² en congé</span>
+          <span><i style="background:#1d4ed8"></i>Enfants chez Yves</span><span><i style="background:#6b7280"></i>Chez l'autre parent</span><span><i style="background:linear-gradient(90deg,#1d4ed8,#6b7280)"></i>Échange</span><span>Barre pâle = garde estimée par règle</span><span>🐱 Lana seule</span><span>🧒 Garde de A² en congé</span>
           <span id="people"></span>
         </div>
       </details>
@@ -46,16 +46,13 @@
         <div class="nav3"><button id="wPrev" aria-label="Semaine précédente">←</button><button id="wToday">Cette semaine</button><button id="wNext" aria-label="Semaine suivante">→</button></div>
         <h2 id="wTitle"></h2>
       </div>
-      <label class="check"><input type="checkbox" id="onlyDiff"> Seulement les différences</label>
+      <label class="check"><input type="checkbox" id="onlyDiff"> Seulement ce qui change</label>
       <p class="wsum" id="wSum" aria-live="polite"></p>
       <div id="weekList"></div>
       <p class="muted">Comparé à la <a href="semaine.html">semaine type</a> (temps scolaire). <span class="diff">Rouge</span> : ce qui change ou s'ajoute ; barré : ce qui n'a pas lieu cette semaine.</p>
     </div>
   </section>
-  <section class="card">
-    <h2 style="margin-top:0;font-size:1.1rem">À venir (30 jours)</h2>
-    <ul class="list" id="upcoming"></ul>
-  </section>
+  <p class="muted legend-line">A² = Adrian et Alixia · « supposé » = d'après le rythme habituel de garde, à confirmer · <a href="semaine.html">Horaires types de la semaine</a></p>
 </main>
 <script src="data/school-holidays.js"></script>
 <script src="data/school-holidays-auto.js"></script>
@@ -102,19 +99,45 @@ function dayDetail(k) {
   const conges = congesOn(k).filter(g => !whoSel.value || g.persons.includes(whoSel.value));
   if (conges.length) rows.push(`<li><span class="t">${conges.map(g => `${esc(g.name)} <span class="muted">· ${esc(personName(g.persons.join(",")))}</span>`).join("<br>")}</span>${catTag("Congé")}</li>`);
   if (h && h.type === "rentree") rows.push(`<li><span class="t">${esc(h.name)} <span class="muted">· ${esc(personName(KIDS.join(",")))}</span></span>${catTag("École")}</li>`);
-  if (c) rows.push(`<li><span class="t">${c === "moi" ? "Enfants chez moi" : c === "autre" ? "Enfants chez l'autre parent" : "Jour d'échange"}${(window.CUSTODY_OVERRIDES || {})[k] ? " <span class=\"muted\">(modifié à la main)</span>" : custodyEstimated(k) ? " <span class=\"muted\">(estimé par règle)</span>" : ""}</span>${catTag("Garde")}</li>`);
-  if (cc) rows.push(`<li><span class="t">🧒 Garde de A² en congé : ${esc(cc.solution || "à organiser")}</span>${catTag("Garde")}</li>`);
-  if (he) rows.push(`<li><span class="t">🐱 Maison vide : Lana ${he.sitter ? "gardée par " + esc(he.sitter) : "sans solution de garde"}</span>${catTag("Maison")}</li>`);
+  if (c) rows.push(`<li><span class="t">${c === "moi" ? "Enfants chez Yves" : c === "autre" ? "Enfants chez l'autre parent" : "Jour de passage"}${(window.CUSTODY_OVERRIDES || {})[k] ? " <span class=\"muted\">(modifié à la main)</span>" : custodyEstimated(k) ? " <span class=\"muted\">(estimé par règle)</span>" : ""}</span>${catTag("Garde")}</li>`);
+  if (cc) rows.push(`<li><span class="t">🧒 Garde d'Adrian et Alixia pendant le congé : ${esc(cc.solution || "à organiser")}</span>${catTag("Garde")}</li>`);
+  if (he) rows.push(`<li><span class="t">🐱 Lana seule à la maison : ${he.sitter ? "gardée par " + esc(he.sitter) : "personne ne la garde pour l'instant"}</span>${catTag("Maison")}</li>`);
   events.filter(e => visible(e) && inRange(k, e.date, e.end) && !CONGE_EVENT.test(e.title)).forEach(e =>
-    rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : e.source ? ` <span class="muted">· ${esc(calendarLabel(e.source))}</span>` : ""}</span></li>`));
+    rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + (e.timeEnd ? "–" + esc(e.timeEnd) : "") + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : e.rec ? ` <span class="muted">· Famille</span>` : e.source ? ` <span class="muted">· ${esc(calendarLabel(e.source))}</span>` : ""}${e.note ? `<small class="note">${esc(e.note)}</small>` : ""}</span>${e.rec ? `<span class="dacts"><button class="mini" data-evedit="${esc(e.rec)}">Modifier</button><button class="mini" data-evdel="${esc(e.rec)}" aria-label="Supprimer ${esc(e.title)}">Supprimer</button></span>` : ""}</li>`));
   return rows.length ? rows.join("") : `<li class="muted">Rien de particulier ce jour-là.</li>`;
 }
 
-// Modifier la garde d'un jour (échange exceptionnel, changement de dernière minute) ou signaler un enfant malade : enregistré dans l'application, partagé entre appareils.
+// Événements saisis dans le site (rendez-vous, sorties, déplacements) : enregistrés comme les tâches, partagés entre appareils.
+let editing = null, notice = ""; // editing : enregistrement en cours de modification ({} = nouvel événement) ; notice : avertissements après un enregistrement
+function eventForm(k) {
+  const r = editing || {}, picked = String(r.person || "").split(",").filter(Boolean), more = r.house || r.noschool || r.remind;
+  const boxes = PEOPLE.filter(p => !p.pet).map(p => `<label class="check"><input type="checkbox" name="person" value="${esc(p.id)}"${picked.includes(p.id) ? " checked" : ""}> ${esc(p.name.replace(/ \(.*\)/, ""))}</label>`).join("");
+  const presets = ["Médecin", "Dentiste", "Sortie", "Voyage"].map(t => `<button type="button" class="mini" data-preset="${t}">${t}</button>`).join("");
+  const remind = [["", "À l'heure habituelle (1 h avant, ou la veille à 18 h)"], ["1", "La veille"], ["2", "2 jours avant"], ["7", "1 semaine avant"]].map(([v, l]) => `<option value="${v}"${String(r.remind || "") === v ? " selected" : ""}>${l}</option>`).join("");
+  return `<details class="dact" id="evBox"${editing ? " open" : ""}><summary>${r.id ? "Modifier l'événement" : "＋ Ajouter un événement ce jour"}</summary>
+    <form id="evForm" class="holform" autocomplete="off">
+      ${r.id ? "" : `<div class="dacts" aria-label="Modèles">${presets}</div>`}
+      <label class="dlgrow">Titre<input name="title" required maxlength="120" value="${esc(r.title || "")}" placeholder="Ex. Dentiste, Spectacle, Voyage" enterkeyhint="next"></label>
+      <div class="two"><label class="dlgrow">Date<input type="date" name="date" required value="${esc(r.date || k)}"></label><label class="dlgrow">Jusqu'au (facultatif)<input type="date" name="end" value="${esc(r.end && r.end !== r.date ? r.end : "")}"></label></div>
+      <div class="two"><label class="dlgrow">Heure (facultatif)<input type="time" name="time" value="${esc(r.time || "")}"></label><label class="dlgrow">Fin (facultatif)<input type="time" name="timeEnd" value="${esc(r.timeEnd || "")}"></label></div>
+      <fieldset class="checks"><legend class="muted">Qui est concerné ? (personne cochée = toute la famille)</legend>${boxes}</fieldset>
+      <label class="dlgrow">Note<input name="note" maxlength="200" value="${esc(r.note || "")}" enterkeyhint="done"></label>
+      <details class="dact" id="evMore"${more ? " open" : ""}><summary>Plus d'options (voyage, jour sans école, rappel, répétition)</summary>
+        <label class="check"><input type="checkbox" name="house"${r.house ? " checked" : ""}> La maison sera vide (Lana seule)</label>
+        <label class="dlgrow">Qui garde Lana (si la maison est vide)<input name="sitter" value="${esc(r.sitter || "")}" maxlength="60"></label>
+        <label class="check"><input type="checkbox" name="noschool"${r.noschool ? " checked" : ""}> Jour sans école (journée pédagogique, grève…) pour les personnes cochées</label>
+        <label class="dlgrow">Me prévenir<select name="remind">${remind}</select></label>
+        <label class="check"><input type="checkbox" name="prep"> Créer une tâche de préparation (la veille)</label>
+        ${r.id ? "" : `<div class="two"><label class="dlgrow">Répéter<select name="repeat"><option value="">Une seule fois</option><option value="7">Chaque semaine</option><option value="14">Toutes les 2 semaines</option><option value="m">Chaque mois</option></select></label><label class="dlgrow">Jusqu'au<input type="date" name="until"></label></div>`}
+      </details>
+      <div class="dacts sticky"><button class="primary">Enregistrer</button>${editing ? `<button type="button" data-evcancel="1">Annuler</button>` : ""}</div>
+      <p class="muted" id="evFlash" aria-live="polite"></p>
+    </form></details>`;
+}
 function dayActions(k) {
   const cur = (window.CUSTODY_OVERRIDES || {})[k], kids = ["alixia", "adrian", "lukas"].map(i => `<option value="${i}">${esc(personName(i))}</option>`).join("");
-  return `<details class="dact"><summary>Modifier la garde ce jour…</summary>
-    <div class="dacts"><button data-ov="moi">Enfants chez moi</button><button data-ov="autre">Chez l'autre parent</button><button data-ov="echange">Jour d'échange</button>${cur ? `<button data-ov="">Rétablir le rythme habituel</button>` : ""}</div>
+  return (notice ? `<div id="evNotice">${notice}</div>` : "") + eventForm(k) + `<details class="dact"><summary>Modifier la garde ce jour…</summary>
+    <div class="dacts"><button data-ov="moi">Enfants chez Yves</button><button data-ov="autre">Chez l'autre parent</button><button data-ov="echange">Jour de passage</button>${cur ? `<button data-ov="">Rétablir le rythme habituel</button>` : ""}</div>
     <label class="dlgrow">Jusqu'au (facultatif : plusieurs jours)<input type="date" id="ovTo" min="${k}"></label>
     <div class="dacts"><select id="sickWho" aria-label="Enfant">${kids}</select><button data-sick="1">Enfant malade ou école fermée : créer la tâche</button></div>
     <p class="muted" id="dFlash" aria-live="polite"></p></details>`;
@@ -152,34 +175,15 @@ function render() {
     const dots = [...(careByDay[k] ? [personColor("alixia")] : []), ...(houseEmptyOn(k) ? [personColor("lana")] : []),
       ...((h && h.type === "ferie") || offByDay[k] ? ["#d92d20"] : []), ...list.map(e => personColor(e.person))];
     const dotHtml = dots.slice(0, 6).map(col => `<i style="background:${col}"></i>`).join("") + (dots.length > 6 ? `<b>+${dots.length - 6}</b>` : "");
-    g.insertAdjacentHTML("beforeend", `<div class="${cls}" data-d="${k}" role="button" tabindex="0" aria-label="${esc(longDay(k))}"><span class="n">${d.getDate()}</span><span class="evs">${careByDay[k] ? `<span class="ev" style="border-color:${personColor("alixia")}" title="Garde de A² pendant le congé">🧒 ${esc(careByDay[k].solution || "garde à organiser")}</span>` : ""}${houseEmptyOn(k) ? `<span class="ev" style="border-color:${personColor("lana")}" title="Maison vide">🐱 ${esc(houseEmptyOn(k).sitter || "à organiser")}</span>` : ""}${h && h.type !== "vacances" ? `<span class="ev">${esc(h.name)}</span>` : ""}${evs}</span><span class="dots">${dotHtml}</span></div>`);
+    g.insertAdjacentHTML("beforeend", `<div class="${cls}" data-d="${k}" role="button" tabindex="0" aria-label="${esc(longDay(k))}"><span class="n">${d.getDate()}</span><span class="evs">${careByDay[k] ? `<span class="ev" style="border-color:${personColor("alixia")}" title="Garde de A² pendant le congé">🧒 ${esc(careByDay[k].solution || "garde à organiser")}</span>` : ""}${houseEmptyOn(k) ? `<span class="ev" style="border-color:${personColor("lana")}" title="Lana seule">🐱 ${esc(houseEmptyOn(k).sitter || "à organiser")}</span>` : ""}${h && h.type !== "vacances" ? `<span class="ev">${esc(h.name)}</span>` : ""}${evs}</span><span class="dots">${dotHtml}</span></div>`);
   }
   document.getElementById("dTitle").textContent = longDay(selDay);
   document.getElementById("dList").innerHTML = dayDetail(selDay);
   document.getElementById("dActions").innerHTML = dayActions(selDay);
-  document.getElementById("upd").textContent = window.CALENDAR_UPDATED ? "Agendas synchronisés le " + new Date(window.CALENDAR_UPDATED).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" }) : "Agendas Google non synchronisés";
+  document.getElementById("upd").textContent = window.CALENDAR_UPDATED ? "Agendas synchronisés le " + new Date(window.CALENDAR_UPDATED).toLocaleString("fr-BE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).replace(":", " h ") : "Agendas Google non synchronisés";
 }
 
-function upcoming() {
-  const today = todayIso(), limit = addDays(today, 30);
-  // Garde : seulement la période en cours et la suivante (sinon une ligne par semaine noie le reste).
-  const custody = custodyPeriods().filter(p => p.end >= today && p.start <= limit).slice(0, 2);
-  const rows = [
-    ...events.filter(e => visible(e) && e.end >= today && e.date <= limit && !CONGE_EVENT.test(e.title)).map(e => ({ start: e.date, text: e.title, tag: calendarLabel(e.source) })),
-    ...custody.map(p => ({ start: p.start, text: (p.who === "moi" ? "Enfants chez moi" : "Enfants chez l'autre parent") + " jusqu'au " + fmt(parse(p.end)), tag: "Garde" })),
-    ...childcareGaps().filter(g => g.end >= today && g.start <= limit).map(g => ({ start: g.start, text: "Garde de A² à organiser (" + g.holiday.replace(/ \(.*\)/, "") + ") jusqu'au " + fmt(parse(g.end)), tag: "Garde" })),
-    ...(window.HOUSE_EMPTY || []).filter(a => a.end >= today && a.start <= limit).map(a => ({ start: a.start, text: "Maison vide : Lana " + (a.sitter ? "gardée par " + a.sitter : "sans solution de garde") + " (" + (a.note || "") + ")", tag: "Lana" })),
-    ...(window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "rentree" && h.end >= today && h.start <= limit).map(h => ({ start: h.start, text: h.name + " · " + personName(KIDS.join(",")), tag: "École" })),
-    ...congesUpcoming(today, limit).map(c => ({ ...c, groups: c.groups.filter(g => !whoSel.value || g.persons.includes(whoSel.value)) })).filter(c => c.groups.length).map(c => ({
-      start: c.start, tag: "Congé",
-      text: c.name + " · " + c.groups.map(g => personName(g.persons.join(",")) + (g.end > c.start ? " jusqu'au " + fmt(parse(g.end)) : "")).join(" ; ")
-    }))
-  ].sort((a, b) => (a.start < today ? today : a.start).localeCompare(b.start < today ? today : b.start));
-  const when = s => (s < today ? "en cours" : s === today ? "aujourd'hui" : fmt(parse(s)));
-  document.getElementById("upcoming").innerHTML = rows.length
-    ? rows.map(r => `<li class="item up"><span class="muted when">${when(r.start)}</span><span class="t">${esc(r.text)}</span><span class="meta">${catTag(r.tag)}</span></li>`).join("")
-    : `<li class="muted">Rien de prévu.</li>`;
-}
+function upcoming() {} // fusionné dans « À venir (14 jours) » (renderHome)
 
 // Écran d'accueil : alertes, aujourd'hui, demain, à anticiper (14 prochains jours).
 function renderHome() {
@@ -187,30 +191,38 @@ function renderHome() {
   const dayOf = k => WeekView.model(WeekView.mondayOf(k), events, careByDay).days.find(d => d.k === k);
   const long = k => parse(k).toLocaleDateString("fr-BE", { weekday: "long", day: "numeric", month: "long" });
   const tasks = Records.local().filter(t => !t.kind && !t.dismissed && !t.done), range = (a, b) => (a === b ? fmt(parse(a)) : `du ${fmt(parse(a))} au ${fmt(parse(b))}`);
+  const undated = tasks.filter(t => !t.due);
   const late = tasks.filter(t => t.due && t.due < today), soon = tasks.filter(t => t.due && t.due >= today && t.due <= addDays(today, 3));
   const list = a => a.slice(0, 3).map(t => esc(t.title)).join(" · ") + (a.length > 3 ? " …" : "");
   const alerts = [];
   if (late.length) alerts.push(["bad", `<a href="taches.html">⚠ ${late.length} tâche${late.length > 1 ? "s" : ""} en retard</a> : ${list(late)}`]);
   if (soon.length) alerts.push(["warn", `<a href="taches.html">${soon.length} tâche${soon.length > 1 ? "s" : ""} à faire d'ici 3 jours</a> : ${list(soon)}`]);
-  childcareGaps().filter(g => g.end >= today && g.start <= addDays(today, 14)).forEach(g => alerts.push(["bad", `<a href="taches.html">Garde de A² à organiser</a> ${range(g.start, g.end)} (${esc(g.holiday.replace(/ \(.*\)/, ""))})`]));
+  if (undated.length) alerts.push(["warn", `<a href="taches.html">${undated.length} tâche${undated.length > 1 ? "s" : ""} sans date</a> : ${list(undated)}`]);
+  childcareGaps().filter(g => g.end >= today && g.start <= addDays(today, 14)).forEach(g => alerts.push(["bad", `<a href="taches.html">Garde d'Adrian et Alixia à organiser</a> ${range(g.start, g.end)} (${esc(g.holiday.replace(/ \(.*\)/, ""))})`]));
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today && a.start <= addDays(today, 30)).forEach(a => alerts.push(["bad", `<a href="taches.html">Qui garde Lana ?</a> ${range(a.start, a.end)}`]));
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances" && h.end >= today && h.start <= addDays(today, 42)).forEach(h => {
     let est = false; for (let k = h.start > today ? h.start : today; k <= h.end; k = addDays(k, 1)) if (custodyEstimated(k)) est = true;
-    if (est) alerts.push(["warn", `Garde estimée par règle pendant ${esc(h.name.replace(/ \(.*\)/, ""))} (${range(h.start, h.end)}) : à confirmer avec l'autre parent`]);
+    if (est) alerts.push(["warn", `Garde supposée (rythme habituel) pendant ${esc(h.name.replace(/ \(.*\)/, ""))} (${range(h.start, h.end)}) : à confirmer avec l'autre parent`]);
   });
   document.getElementById("homeAlerts").innerHTML = alerts.map(([l, h]) => `<p class="alert ${l}">${h}</p>`).join("");
   const opts = { who, compact: true };
   document.getElementById("homeToday").innerHTML = WeekView.card(dayOf(today), { ...opts, title: `Aujourd'hui · ${long(today)}` });
   document.getElementById("homeTomorrow").innerHTML = WeekView.card(dayOf(tomorrow), { ...opts, title: `Demain · ${long(tomorrow)}` });
-  // À anticiper : tâches proches, rappels annuels, événements d'école avec une action à faire, congés qui approchent
-  const lim = addDays(today, 14), known = new Set(Records.local().filter(t => !t.kind).map(t => t.title)), rows = [];
-  tasks.filter(t => t.due && t.due > today && t.due <= lim && (!who || t.who === who)).forEach(t => rows.push({ d: t.due, text: t.title, tag: t.cat }));
-  annualTasks(today).filter(t => t.due <= addDays(today, 21) && !known.has(t.title) && (!who || t.who === who)).forEach(t => rows.push({ d: t.due, text: "Rappel : " + t.title, tag: t.cat }));
-  events.filter(e => visible(e) && e.end >= today && e.date <= lim && !CONGE_EVENT.test(e.title) && (e.todo || e.needsParent || /réunion|bulletin|examen|délibération|voyage|CEB|classes de neige/i.test(e.title)))
-    .forEach(e => rows.push({ d: e.date < today ? today : e.date, text: e.title + (e.todo ? " — " + e.todo : "") + (e.person ? " · " + personName(e.person) : ""), tag: "École" }));
-  congesUpcoming(today, addDays(today, 30)).filter(c => c.start > today).forEach(c => rows.push({ d: c.start, text: "Congé : " + c.name + " · " + personName(c.groups.flatMap(g => g.persons).join(",")), tag: "Congé" }));
+  // À venir (14 jours) : une seule liste, triée par date et sans doublon — tâches proches, rendez-vous et événements, école, congés, changement de garde.
+  // Les rappels annuels sont regroupés en une ligne (la liste complète est dans Tâches).
+  const lim = addDays(today, 14), known = new Set(Records.local().filter(t => !t.kind).map(t => t.title)), rows = [], seen = new Set();
+  const add = (d, text, tag, href) => { const key = d + "|" + text; if (seen.has(key)) return; seen.add(key); rows.push({ d, text, tag, href }); };
+  tasks.filter(t => t.due && t.due > today && t.due <= lim && (!who || t.who === who || t.who === "famille")).forEach(t => add(t.due, t.title + (t.time ? " à " + t.time.replace(":", " h ") : ""), t.cat, "taches.html"));
+  events.filter(e => visible(e) && e.end >= today && e.date <= lim && !CONGE_EVENT.test(e.title) && !/^ULiège : (vacances|congé)/.test(e.title))
+    .forEach(e => add(e.date < today ? today : e.date, (e.time ? e.time + " " : "") + e.title + (e.todo ? " — " + e.todo : "") + (e.person ? " · " + personName(e.person) : e.rec ? " · Famille" : ""), e.rec ? "Rendez-vous" : calendarLabel(e.source)));
+  congesUpcoming(today, addDays(today, 30)).filter(c => c.start > today).forEach(c => add(c.start, "Congé : " + c.name + " · " + personName(c.groups.flatMap(g => g.persons).join(",")), "Congé"));
+  custodyPeriods().filter(p => p.start > today && p.start <= lim).slice(0, 1).forEach(p => add(p.start, (p.who === "moi" ? "Les enfants arrivent chez Yves" : "Les enfants partent chez l'autre parent") + " jusqu'au " + fmt(parse(p.end)), "Garde"));
+  const annual = annualTasks(today).filter(t => t.due <= addDays(today, 21) && !known.has(t.title) && (!who || t.who === who || t.who === "famille"));
+  if (annual.length) add(annual[0].due, `${annual.length} rappel${annual.length > 1 ? "s" : ""} à traiter : ${annual.slice(0, 3).map(t => t.title.replace(/ \(.*$/, "")).join(" · ")}${annual.length > 3 ? " …" : ""}`, "Maison", "taches.html");
   rows.sort((a, b) => a.d.localeCompare(b.d));
-  document.getElementById("homeAhead").innerHTML = rows.slice(0, 8).map(r => `<li class="item up"><span class="muted when">${r.d === today ? "aujourd'hui" : fmt(parse(r.d))}</span><span class="t">${esc(r.text)}</span><span class="meta">${catTag(r.tag)}</span></li>`).join("") || `<li class="muted">Rien d'urgent dans les 14 prochains jours.</li>`;
+  const li = r => `<li class="item up"><span class="muted when">${r.d === today ? "aujourd'hui" : fmt(parse(r.d))}</span><span class="t">${r.href ? `<a href="${r.href}">${esc(r.text)}</a>` : esc(r.text)}</span><span class="meta">${catTag(r.tag)}</span></li>`;
+  document.getElementById("homeAhead").innerHTML = rows.slice(0, 8).map(li).join("") || `<li class="muted">Rien d'urgent dans les 14 prochains jours.</li>`;
+  document.getElementById("homeMore").innerHTML = rows.length > 8 ? `<details><summary>${rows.length - 8} autre${rows.length - 8 > 1 ? "s" : ""}</summary><ul class="list">${rows.slice(8).map(li).join("")}</ul></details>` : "";
 }
 
 function goMonth(n) {
@@ -228,7 +240,7 @@ function renderWeek() {
   document.getElementById("weekList").innerHTML = r.html;
   const sum = document.getElementById("wSum");
   sum.className = "wsum " + (r.diffs ? "bad" : "ok");
-  sum.textContent = r.diffs ? `${r.diffs} différence${r.diffs > 1 ? "s" : ""} par rapport à la semaine type` : "Semaine conforme à la semaine type";
+  sum.textContent = r.diffs ? `${r.diffs} changement${r.diffs > 1 ? "s" : ""} par rapport à la semaine type` : "Semaine conforme à la semaine type";
 }
 function setView(v) {
   document.getElementById("monthView").hidden = v !== "month"; document.getElementById("weekView").hidden = v !== "week";
@@ -251,13 +263,86 @@ document.getElementById("detail").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.ov !== undefined) applyOverride(b.dataset.ov);
   if (b.dataset.sick) sickTask();
+  if (b.dataset.preset) {
+    const t = document.querySelector("#evForm [name=title]"); if (!t.value.trim()) t.value = b.dataset.preset + (b.dataset.preset === "Voyage" ? "" : " : "); t.focus();
+    if (b.dataset.preset === "Voyage") { document.getElementById("evMore").open = true; document.querySelector("#evForm [name=house]").checked = true; }
+  }
+  if (b.dataset.evedit) { editing = Records.of("event").find(r => String(r.id) === b.dataset.evedit) || null; notice = ""; render(); const f = document.getElementById("evBox"); if (f) f.scrollIntoView({ block: "center" }); }
+  if (b.dataset.evcancel) { editing = null; render(); }
+  if (b.dataset.evdel) deleteEvent(b.dataset.evdel);
 });
-const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.dataset.d; render(); const f = document.querySelector(".day.sel"); if (f) f.focus({ preventScroll: true }); } };
+// Supprime un événement (et sa série, si l'utilisateur le demande) avec ses tâches de préparation.
+async function deleteEvent(id) {
+  const r = Records.of("event").find(x => String(x.id) === id); if (!r) return;
+  let ids = [r.id];
+  if (r.series) {
+    const later = Records.of("event").filter(x => x.series === r.series && x.date >= r.date);
+    if (later.length > 1 && confirm(`« ${r.title} » se répète : supprimer cette occurrence et les ${later.length - 1} suivantes ?\nOK = toute la suite · Annuler = choisir`)) ids = later.map(x => x.id);
+    else if (!confirm(`Supprimer seulement « ${r.title} » du ${fmt(parse(r.date))} ?`)) return;
+  } else if (!confirm(`Supprimer « ${r.title} » ?`)) return;
+  for (const x of ids) { await Records.remove(x); await Records.remove("prep-" + x); await Records.remove("trip-" + x); }
+  notice = ""; redrawAll();
+}
+const redrawAll = () => { recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek(); };
+// Avertissements après l'enregistrement d'un déplacement ou d'un jour sans école.
+function eventNotice(r) {
+  const out = [], who = personName(r.person || "");
+  if (r.house) out.push(r.sitter ? `Lana : gardée par ${esc(r.sitter)}.` : `Lana sera seule : <b>personne ne la garde pour l'instant</b> (une alerte « Qui garde Lana ? » reste affichée tant que ce n'est pas noté).`);
+  if (r.date !== (r.end || r.date) || r.house || r.noschool) {
+    schoolDaysMissed(r.date, r.end || r.date, r.person).forEach(m => out.push(`${esc(personName(m.person))} : ${m.days.length} jour${m.days.length > 1 ? "s" : ""} ${m.person === "louanne" ? "de cours" : "d'école"} manqué${m.days.length > 1 ? "s" : ""} (${m.days.slice(0, 4).map(k => esc(fmt(parse(k)))).join(", ")}${m.days.length > 4 ? "…" : ""}).`));
+  }
+  if (r.noschool) out.push(`Pas d'école pour ${esc(who || "les enfants")} ce jour-là : la garde de A² à organiser est recalculée.`);
+  return out.length ? `<p class="alert warn">${out.join("<br>")}</p>` : "";
+}
+document.getElementById("detail").addEventListener("submit", async e => {
+  if (e.target.id !== "evForm") return;
+  e.preventDefault();
+  const f = new FormData(e.target), v = n => (f.get(n) || "").toString().trim();
+  const rec = { id: editing && editing.id ? editing.id : Records.newId("e"), kind: "event", title: v("title"), date: v("date"), end: v("end"), time: v("time"), timeEnd: v("timeEnd"), person: f.getAll("person").join(","), note: v("note"),
+    house: f.has("house"), sitter: v("sitter"), noschool: f.has("noschool"), remind: v("remind") };
+  if (editing && editing.series) rec.series = editing.series;
+  const flash = t => { document.getElementById("evFlash").textContent = t; };
+  if (!rec.title || !rec.date) return flash("Titre et date obligatoires.");
+  if (rec.end && rec.end < rec.date) return flash("La date de fin précède le début.");
+  if (rec.timeEnd && !rec.time) return flash("Indiquez l'heure de début avant l'heure de fin.");
+  if (rec.time && rec.timeEnd && rec.timeEnd <= rec.time && (!rec.end || rec.end === rec.date)) return flash("L'heure de fin doit suivre l'heure de début.");
+  const repeat = v("repeat"), until = v("until");
+  if (repeat && until && until < rec.date) return flash("La répétition s'arrête avant la première date.");
+  // Répétition : une occurrence par semaine, par quinzaine ou par mois jusqu'à la date indiquée (6 mois par défaut, 60 occurrences au plus)
+  const list = [rec];
+  if (repeat) {
+    rec.series = rec.id; const stop = until || addDays(rec.date, 183), span = rec.end ? Math.round((parse(rec.end) - parse(rec.date)) / MS) : 0;
+    for (let i = 1; i < 60; i++) {
+      const d = repeat === "m" ? iso(new Date(+rec.date.slice(0, 4), +rec.date.slice(5, 7) - 1 + i, +rec.date.slice(8))) : addDays(rec.date, i * +repeat);
+      if (d > stop) break;
+      list.push({ ...rec, id: `${rec.id}-${i}`, date: d, end: rec.end ? addDays(d, span) : "" });
+    }
+  }
+  const today = todayIso(), prep = [];
+  if (f.has("prep")) prep.push({ id: "prep-" + rec.id, title: `Préparer : ${rec.title}`, cat: "Autre", who: rec.person && !rec.person.includes(",") ? rec.person : "moi", due: addDays(rec.date, -1) < today ? today : addDays(rec.date, -1), done: false });
+  if (rec.house || (rec.end && rec.end > rec.date && rec.person.split(",").length >= 2)) prep.push({ id: "trip-" + rec.id, title: `Avant le départ « ${rec.title} » : documents d'identité, courrier, plantes, voiture, réservations`, cat: "Vacances", who: "moi", due: addDays(rec.date, -7) < today ? today : addDays(rec.date, -7), done: false });
+  editing = null; selDay = rec.date; cur = new Date(parse(selDay)); cur.setDate(1); notice = eventNotice(rec);
+  for (const r of list) await Records.put(r);
+  for (const t of prep) if (!Records.local().some(x => x.id === t.id && x.done)) await Records.put(t);
+  redrawAll();
+});
+const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.dataset.d; editing = null; notice = ""; render(); const f = document.querySelector(".day.sel"); if (f) f.focus({ preventScroll: true }); } };
 document.getElementById("grid").addEventListener("click", pick);
 document.getElementById("grid").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
 render(); upcoming(); renderHome();
-Records.refresh().then(changed => { if (changed) { recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek(); } });
+// Synchronisation au chargement, puis à chaque retour sur la page (application rouverte, réseau revenu, minuit passé).
+const redraw = redrawAll;
+Records.refresh().then(changed => { if (changed) redraw(); });
+Records.watch(({ newDay }) => {
+  if (newDay) { selDay = todayIso(); cur = new Date(); cur.setDate(1); weekStart = WeekView.mondayOf(todayIso()); } // la page est restée ouverte : « aujourd'hui » avance
+  redraw();
+});
 try { if (sessionStorage.getItem("planning-view") === "week") setView("week"); } catch (e) {}
+// Bouton ＋ du menu (depuis n'importe quelle page) : ouvre le formulaire d'événement sur aujourd'hui
+function openNewEvent() { selDay = todayIso(); cur = new Date(); cur.setDate(1); editing = {}; notice = ""; setView("month"); render(); const f = document.getElementById("evBox"); if (f) { f.scrollIntoView({ block: "center" }); const t = f.querySelector("[name=title]"); if (t) t.focus({ preventScroll: true }); } }
+if (location.hash === "#new-event") openNewEvent();
+document.getElementById("fabMenu").addEventListener("click", e => { const a = e.target.closest("a[href=\"index.html#new-event\"]"); if (a) { e.preventDefault(); openNewEvent(); } });
+addEventListener("hashchange", () => { if (location.hash === "#new-event") openNewEvent(); });
 </script>
 </body>
 </html>

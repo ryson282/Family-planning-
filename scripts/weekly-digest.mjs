@@ -27,6 +27,12 @@ run(`(window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances" && h.end >
   if (run(`(() => { for (let k = ${J(h.start > today ? h.start : today)}; k <= ${J(h.end)}; k = addDays(k, 1)) if (custodyEstimated(k)) return true; return false; })()`)) todo.push(`Garde **estimée par règle** pendant ${h.name.replace(/ \(.*\)/, "")} (${range(h.start, h.end)}) : à confirmer avec l'autre parent`);
 });
 if (todo.length) L.push("## À traiter", "", ...todo.map(t => `- ${t}`), "");
+// Sortie à deux de la semaine (événement « outing ») : avec qui garde les enfants quand ils sont chez Yves
+const outs = stored.filter(r => r.kind === "event" && r.outing && r.date <= sunday && (r.end || r.date) >= monday).sort((a, b) => a.date.localeCompare(b.date));
+if (outs.length) L.push("## Sortie à deux", "", ...outs.map(r => {
+  const kids = run(`custodyOn(${J(r.date)})`), care = r.care ? ` — garde des enfants : ${r.care}` : kids === "moi" ? " — ⚠ enfants chez Yves : qui garde ?" : "";
+  return `- ${fmt(r.date)}${r.time ? " à " + r.time.replace(":", " h ") : ""}${r.end && r.end !== r.date ? " au " + fmt(r.end) : ""}${r.note ? " : " + r.note : ""}${r.book ? " (à réserver)" : ""}${care}`;
+}), "");
 
 // Jour par jour : garde, congés, changements et événements
 L.push("## Jour par jour", "");

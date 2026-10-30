@@ -19,7 +19,7 @@
       <form class="add" id="f">
         <input id="title" placeholder="Nouvelle tâche…" aria-label="Titre de la tâche" required>
         <select id="who" aria-label="Responsable"></select>
-        <select id="cat" aria-label="Catégorie"><option>Garde</option><option>École</option><option>Administratif</option><option>Santé</option><option>Activités</option><option>Vacances</option><option>Sorties</option><option>Maison</option><option>Autre</option></select>
+        <select id="cat" aria-label="Catégorie"><option>Garde</option><option>École</option><option>Administratif</option><option>Santé</option><option>Activités</option><option>Vacances</option><option>Maison</option><option>Autre</option></select>
         <input id="due" type="date" aria-label="Échéance">
         <input id="time" type="time" aria-label="Heure (facultatif)">
         <button class="primary">Ajouter</button>
@@ -33,15 +33,6 @@
       <ul class="list" id="suggList"></ul>
       <details id="suggLaterBox" hidden><summary class="muted" id="suggLaterSum"></summary><ul class="list" id="suggLater"></ul></details>
       <p class="muted">« Ignorer » = ne pas le faire (ou déjà réglé) : la suggestion ne revient plus.</p>
-    </details>
-  </section>
-  <section class="card" id="out" hidden>
-    <details>
-      <summary><b>Sorties avec Émilie</b> <span class="muted" id="outCount"></span></summary>
-      <p class="muted">Quand Adrian et Alixia sont chez l'autre parent (ou occupés par un stage ou une garde organisée), avec l'heure à partir de laquelle vous êtes libres le soir (activités d'Émilie, retour de Bruxelles, piscine et récupération de Louanne pris en compte).</p>
-      <p id="lastOut" class="wsum" style="margin:6px 0"></p>
-      <button type="button" id="outDone" class="mini" title="Noter une sortie à deux (aujourd'hui)">On est sortis aujourd'hui</button>
-      <ul class="list" id="outList"></ul>
     </details>
   </section>
   <section class="card">
@@ -158,24 +149,6 @@ function suggestions() {
   return [...yearly.filter(keep).sort(byDue), ...out.filter(keep).sort(byDue).slice(0, 16)].sort(byDue);
 }
 
-// Opportunités de sortie : A² absents (heure de libération le soir pour chaque jour) ou occupés (stage / garde organisée), sur 4 mois.
-function outings() {
-  const today = iso(new Date()), range = (a, b) => a === b ? fmt(parse(a)) : `du ${fmt(parse(a))} au ${fmt(parse(b))}`;
-  const clock = m => `${Math.floor(m / 60)} h${m % 60 ? " " + String(m % 60).padStart(2, "0") : ""}`;
-  const wd = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
-  return outingWindows(today, 120).slice(0, 10).map(w => {
-    if (w.kind !== "absents") return { text: `A² occupés (${w.note || "garde organisée"}) ${range(w.start, w.end)} : journées libres`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² en ${w.note || "garde organisée"})`, due: w.start, until: w.end };
-    const parts = [];
-    for (let k = w.start; k <= w.end && parts.length < 9; k = addDays(k, 1)) {
-      const d = parse(k).getDay();
-      if (d === 6 || d === 0) { parts.push(`${wd[d]} libre`); continue; }
-      const t = eveningFreeFrom(d);
-      if (t <= 21 * 60 + 30) parts.push(`${wd[d]} dès ${clock(t)}`);
-    }
-    return { text: `A² chez l'autre parent ${range(w.start, w.end)} — soirs : ${parts.join(" · ") || "aucun soir libre"}`, title: `Sortie avec Émilie ${range(w.start, w.end)} (A² absents)`, due: w.start, until: w.end };
-  }).filter(o => !tasks.some(t => t.title === o.title));
-}
-
 function add(t) {
   const { key, recurring, start, lead, deadline, record, plan, ...rest } = t;
   if (rest.who === "famille") rest.who = "moi"; // Yves par défaut ; à réattribuer d'un geste dans la liste
@@ -198,7 +171,7 @@ async function runSync() {
   renderStatus();
 }
 
-// Nettoyage : les tâches de planning liées à une période (garde, vacances, Lana, sorties) et les suggestions écartées sont supprimées
+// Nettoyage : les tâches de planning liées à une période (garde, vacances, Lana ; l'ancienne tâche « Sortie avec Émilie » n'est conservée ici que pour être purgée) et les suggestions écartées sont supprimées
 // une fois la période passée. Les tâches libres (et les entretiens) ne sont jamais supprimées automatiquement.
 // Anciennes tâches sans « until » : reconnues seulement si leur titre est exactement celui d'une suggestion de période.
 const GENERATED_RE = /^(Planification de (?:garde A² \(Adrian et Alixia\)|vacances)|Garde de Lana si départ en vacances|Trouver qui garde Lana du|Sortie avec Émilie) (?:du \S+ \d{1,2} \S+ au \S+ \d{1,2} \S+|\S+ \d{1,2} \S+)/;
@@ -246,12 +219,6 @@ function render() {
   document.getElementById("suggLaterSum").textContent = `${laterIdx.length} autre${laterIdx.length > 1 ? "s" : ""}, plus tard`;
   document.getElementById("suggLater").innerHTML = laterIdx.map(i => sugLi(s[i], i)).join("");
   window._s = s;
-  const o = outings();
-  document.getElementById("out").hidden = !o.length;
-  document.getElementById("outCount").textContent = o.length ? `(${o.length})` : "";
-  document.getElementById("outList").innerHTML = o.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.text)}</span><span class="meta">${catTag("Sorties")}</span><button data-o="${i}">Ajouter</button></li>`).join("");
-  window._o = o;
-  renderLastOuting();
   renderDeadlines();
 }
 
@@ -272,7 +239,6 @@ document.addEventListener("click", e => {
   if (d.p) { const x = window._s[d.p]; if (x && x.plan) openPlan(x); }
   if (d.dp) { document.getElementById("dueTitle").value = d.dp; document.getElementById("dueDate").focus(); return; }
   if (d.dd) { const r0 = Records.of("deadline", tasks).find(r => String(r.id) === d.dd); if (r0 && !confirm(`Supprimer l'échéance « ${r0.title} » ?`)) return; Records.remove(d.dd).then(() => { tasks = Records.local(); render(); }); }
-  if (d.o) { const o = window._o[d.o]; if (o) add({ title: o.title, who: "moi", cat: "Sorties", due: o.due, until: o.until, key: o.title }); }
 });
 document.addEventListener("change", e => {
   if (e.target.dataset.id) { const t = tasks.find(t => String(t.id) === e.target.dataset.id); if (!t) return; t.done = e.target.checked; t.doneAt = t.done ? nowMs() : undefined; t.updated = nowMs(); save(); render(); remotePush(t); }
@@ -304,21 +270,6 @@ document.getElementById("dlgForm").onsubmit = async e => {
     : { id: `c${p.start}${p.end}`, kind: "childcare", start: p.start, end: p.end, solution: who, status: document.getElementById("dlgStatus").value, note });
   tasks = Records.local(); render();
 };
-
-// Mémoire des sorties à deux : dernière sortie notée (enregistrement « outing » ou tâche « Sortie… » terminée), objectif d'une sortie toutes les 3 semaines.
-const OUTING_GOAL_DAYS = 21;
-function lastOuting() {
-  const days = [...Records.of("outing", tasks).map(r => r.date), ...tasks.filter(t => !t.kind && t.cat === "Sorties" && t.done && t.doneAt).map(t => iso(new Date(t.doneAt)))].filter(Boolean).sort();
-  return days.length ? days[days.length - 1] : null;
-}
-function renderLastOuting() {
-  const el = document.getElementById("lastOut"), last = lastOuting(), today = iso(new Date());
-  if (!last) { el.className = "wsum"; el.textContent = "Aucune sortie à deux notée pour l'instant."; return; }
-  const days = Math.round((parse(today) - parse(last)) / MS), weeks = Math.floor(days / 7);
-  el.textContent = days === 0 ? "Dernière sortie : aujourd'hui ✓" : `Dernière sortie : il y a ${days < 14 ? days + " jours" : weeks + " semaines"}${days > OUTING_GOAL_DAYS ? " — objectif : une sortie toutes les 3 semaines" : ""}`;
-  el.className = "wsum " + (days > OUTING_GOAL_DAYS ? "bad" : "ok");
-}
-document.getElementById("outDone").onclick = async () => { await Records.put({ id: Records.newId("g"), kind: "outing", date: iso(new Date()) }); tasks = Records.local(); render(); };
 
 // Échéances du foyer (enregistrements « deadline »)
 const EVERY = { 0: "une seule fois", 1: "chaque année", 2: "tous les 2 ans", 3: "tous les 3 ans", 5: "tous les 5 ans", 6: "tous les 6 ans", 10: "tous les 10 ans" };

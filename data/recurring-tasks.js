@@ -2,7 +2,7 @@
 // month : 1 = janvier ... 12 = décembre ; day (facultatif) : jour précis, sinon tout le mois (échéance = le 1er) ;
 // lead (facultatif, défaut 60) : nombre de jours d'anticipation ; every + from (facultatifs) : tous les N ans à partir de l'année `from` ;
 // check : true = date ou règle à vérifier (« (à vérifier) » est ajouté au titre).
-// who : famille | moi | emilie | alixia | adrian | lukas | louanne | lana ; cat : Garde, École, Administratif, Santé, Activités, Vacances, Sorties, Maison, Autre
+// who : famille | moi | emilie | alixia | adrian | lukas | louanne | lana ; cat : Garde, École, Administratif, Santé, Activités, Vacances, Maison, Autre
 // Ici : uniquement ce qui revient à date fixe (les échéances propres à chaque contrat ne sont pas encore gérées).
 window.RECURRING_TASKS = [
   // Maison

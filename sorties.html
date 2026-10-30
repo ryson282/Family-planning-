@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#4f6bed">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<title>Sorties à deux</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header><h1>Sorties à deux</h1></header>
+<main>
+  <section class="card">
+    <p id="lastOut" class="wsum" style="margin:0 0 6px"></p>
+    <div class="best" id="best" hidden></div>
+    <div class="dacts"><button type="button" id="outDone" class="primary">On est sortis aujourd'hui</button><button type="button" id="outYest">Hier</button><button type="button" id="outSat">Samedi dernier</button></div>
+    <details class="dact"><summary>Noter une autre date</summary>
+      <div class="dacts"><label class="dlgrow" style="margin:0">Date de la sortie<input type="date" id="outDate"></label><button type="button" id="outOther">Noter</button></div>
+    </details>
+    <p class="muted" id="outFlash" aria-live="polite" tabindex="-1" style="margin:6px 0 0"></p>
+  </section>
+  <section class="card" id="confirmBox" hidden>
+    <h2 style="margin-top:0;font-size:1.1rem">À confirmer</h2>
+    <p class="muted" style="margin-top:0">Ces sorties étaient prévues : ont-elles eu lieu ?</p>
+    <ul class="list" id="confirm"></ul>
+  </section>
+  <section class="card">
+    <h2 style="margin-top:0;font-size:1.1rem">Occasions</h2>
+    <div class="chips2" role="group" aria-label="Type d'occasion" id="filters"></div>
+    <ul class="list" id="slots"></ul>
+    <div class="more" id="slotsMore"></div>
+    <details class="dact"><summary>Comment sont calculées les occasions ?</summary>
+      <p class="muted"><span class="occ occ-heures">Quelques heures</span> un soir de semaine, à partir de l'heure où vous êtes libres (activités d'Émilie, retour de Bruxelles, piscine, récupération de Louanne). <span class="occ occ-journee">Journée</span> un jour entier (un samedi ou un dimanche, ou un stage). <span class="occ occ-weekend">Week-end</span> le samedi et le dimanche, avec le vendredi soir. <span class="occ occ-escapade">Escapade</span> plusieurs jours de congé. Tout cela quand Adrian et Alixia sont chez l'autre parent, occupés par un stage, ou (« garde à confirmer ») chez vous avec Louanne ou Lukas à la maison. Les soirs où quelque chose est déjà prévu sont masqués ou signalés.</p>
+    </details>
+  </section>
+  <section class="card" id="plannedBox" hidden>
+    <h2 style="margin-top:0;font-size:1.1rem">Déjà prévues</h2>
+    <ul class="list" id="planned"></ul>
+  </section>
+  <section class="card" id="lastBox" hidden>
+    <h2 style="margin-top:0;font-size:1.1rem">Dernières sorties</h2>
+    <ul class="list" id="lastList"></ul>
+  </section>
+</main>
+<dialog id="dlg" aria-labelledby="dlgTitle">
+  <form id="dlgForm" method="dialog">
+    <h3 id="dlgTitle" style="margin-top:0">Planifier</h3>
+    <div class="two"><label class="dlgrow"><span>Date</span><input type="date" id="sDate" required></label><label class="dlgrow"><span>Jusqu'au (facultatif)</span><input type="date" id="sEnd"></label></div>
+    <div class="two"><label class="dlgrow"><span>Heure</span><input type="time" id="sTime"></label><label class="dlgrow"><span>Qui garde les enfants ?</span><input id="sCare" autocomplete="off" maxlength="60" placeholder="Louanne, Lukas, Myriam…"></label></div>
+    <div class="dacts" aria-label="Choix rapides pour la garde"><button type="button" class="mini" data-care="Louanne">Louanne</button><button type="button" class="mini" data-care="Lukas">Lukas</button><button type="button" class="mini" data-care="Myriam">Myriam</button><button type="button" class="mini" data-care="Chez l'autre parent">Chez l'autre parent</button></div>
+    <label class="dlgrow"><span>Où, quoi (facultatif)</span><input id="sNote" autocomplete="off" maxlength="120" placeholder="Restaurant, cinéma…"></label>
+    <label class="check"><input type="checkbox" id="sBook"> À réserver (spectacle, restaurant)</label>
+    <label class="dlgrow" id="sRemindRow" hidden><span>Me prévenir</span><select id="sRemind"><option value="3">3 jours avant</option><option value="7" selected>1 semaine avant</option><option value="14">2 semaines avant</option></select></label>
+    <div id="houseBox" hidden>
+      <label class="check"><input type="checkbox" id="sHouse"> La maison sera vide (Lana seule)</label>
+      <label class="dlgrow" id="sSitterRow" hidden><span>Qui garde Lana ?</span><input id="sSitter" autocomplete="off" maxlength="60"></label>
+    </div>
+    <p class="muted" id="dlgErr" role="alert"></p>
+    <div class="dlgbtns"><button type="button" id="sCancel">Annuler</button><button class="primary">Ajouter au planning</button></div>
+  </form>
+</dialog>
+<script src="data/school-holidays.js"></script>
+<script src="data/school-holidays-auto.js"></script>
+<script src="data/people.js"></script>
+<script src="data/absences.js"></script>
+<script src="data/custody.js"></script>
+<script src="data/childcare.js"></script>
+<script src="data/school-events.js"></script>
+<script src="data/schedules.js"></script>
+<script src="data/calendar.js"></script>
+<script src="data/calendar-filters.js"></script>
+<script src="assets/common.js"></script>
+<script src="data/sync-config.js"></script>
+<script src="assets/tasks-sync.js"></script>
+<script src="assets/records.js"></script>
+<script>
+nav("o");
+Records.apply();
+const today = () => iso(new Date());
+const esc2 = esc;
+const clock = m => `${Math.floor(m / 60)} h${m % 60 ? " " + String(m % 60).padStart(2, "0") : ""}`;
+const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const WD = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
+const dm = k => fmt(parse(k)).replace(/^[^ ]+ /, "");              // « 6 nov. »
+const dayLong = k => `${WD[parse(k).getDay()]} ${dm(k)}`;           // « ven. 6 nov. »
+const TYPES = { heures: "Quelques heures", journee: "Journée", weekend: "Week-end", escapade: "Escapade" };
+const TITLES = { heures: "Sortie à deux", journee: "Sortie à deux", weekend: "Week-end à deux", escapade: "Escapade à deux" };
+const tag = type => `<span class="occ occ-${type}">${TYPES[type]}</span>`;
+const plannedAll = () => Records.of("event").filter(r => r.outing && /^\d{4}-\d\d-\d\d$/.test(r.date || ""));
+const planned = () => plannedAll().sort((a, b) => a.date.localeCompare(b.date));
+const flash = (t, html) => { const el = document.getElementById("outFlash"); if (html) el.innerHTML = html; else el.textContent = t; };
+let filter = ""; try { filter = sessionStorage.getItem("sorties-filter") || ""; } catch (e) {}
+
+// ---- Dernière sortie -------------------------------------------------------------
+function renderLast() {
+  const el = document.getElementById("lastOut"), last = lastOuting(Records.local()), t = today();
+  if (!last) { el.className = "wsum"; el.textContent = "Aucune sortie à deux notée pour l'instant."; return; }
+  const days = Math.round((parse(t) - parse(last)) / MS);
+  el.textContent = `Dernière sortie : ${ago(days)}${days > OUTING_GOAL_DAYS ? ". Une soirée à deux cette semaine ?" : " ✓"}`;
+  el.className = "wsum" + (days > OUTING_GOAL_DAYS ? "" : " ok");
+}
+
+// ---- Occasions : une ligne par créneau, avec un type selon le temps libre ---------
+function occasions() {
+  const t = today(), horizon = 150, now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const mine = e => !e.person || String(e.person).split(",").some(p => p === "moi" || p === "emilie");
+  const evs = allEvents().filter(e => !CONGE_EVENT.test(e.title) && mine(e) && (e.source !== "École" || e.needsParent));
+  const off = new Map(daysOff().map(o => [o.date, o.name]));
+  const takenOut = new Set([...plannedAll().map(r => r.date), ...Records.of("outing").map(r => r.date)]);
+  const fete = k => off.get(k) ? off.get(k).toLowerCase() : ["12-24", "12-31"].includes(k.slice(5)) ? "réveillon" : k.slice(5) === "12-25" ? "Noël" : k.slice(5) === "01-01" ? "Nouvel An" : "";
+  // un événement du soir (17 h ou plus) masque l'occasion ; une journée entière la signale seulement
+  const busy = k => evs.filter(e => inRange(k, e.date, e.end));
+  const hidden = k => takenOut.has(k) || busy(k).some(e => e.time && e.time >= "17:00");
+  const warn = k => { const b = busy(k).filter(e => !e.time || e.time < "17:00"); return b.length ? `déjà prévu : ${b[0].title}${b.length > 1 ? " …" : ""}` : ""; };
+  const out = [];
+  const hours = m => { const h = Math.max(1, Math.round((23 * 60 - m) / 30) / 2); return String(h).replace(".", ","); };
+  const evening = (k, care) => {
+    const d = parse(k).getDay(), m = d === 6 || d === 0 ? 19 * 60 + 30 : eveningFreeFrom(d);
+    if (m > 21 * 60 + 30 || (k === t && nowMin > 21 * 60) || hidden(k)) return;
+    out.push({ type: "heures", date: k, end: "", time: hhmm(Math.max(m, 19 * 60)), care, fete: fete(k), warn: warn(k), label: dayLong(k), sub: `libres dès ${clock(m)}, environ ${hours(m)} h` });
+  };
+  outingWindows(t, horizon).forEach(w => {
+    if (w.kind !== "absents") {
+      out.push({ type: "journee", date: w.start, end: w.end, time: "", care: false, fete: "", warn: warn(w.start), label: w.start === w.end ? dayLong(w.start) : `du ${dayLong(w.start)} au ${dayLong(w.end)}`, sub: `journées libres (${w.note || "garde organisée"})` });
+      return;
+    }
+    for (let k = w.start; k <= w.end; k = addDays(k, 1)) {
+      const d = parse(k).getDay();
+      if (d === 6 && k < w.end && !hidden(k) && !takenOut.has(addDays(k, 1))) {            // samedi + dimanche dans la période : week-end (avec le vendredi soir si libre)
+        const fri = addDays(k, -1), withFri = fri >= w.start && eveningFreeFrom(5) <= 21 * 60 + 30 && !hidden(fri);
+        const start = withFri ? fri : k, sun = addDays(k, 1);
+        out.push({ type: "weekend", date: start, end: sun, time: withFri ? hhmm(Math.max(eveningFreeFrom(5), 19 * 60)) : "", care: false, fete: fete(k) || fete(sun), warn: warn(k) || warn(sun),
+          label: `${dayLong(start)} au ${dayLong(sun)}`, sub: withFri ? "du vendredi soir au dimanche" : "samedi et dimanche" });
+        // le même week-end offre aussi une journée seule (samedi ou dimanche) : moins de temps à libérer
+        [k, sun].filter(j => !hidden(j) && j >= t).forEach(j => out.push({ type: "journee", date: j, end: "", time: "", care: false, fete: fete(j), warn: warn(j), label: dayLong(j), sub: "libres toute la journée" }));
+        k = sun; continue;
+      }
+      if (d === 6 || d === 0) { if (!hidden(k)) out.push({ type: "journee", date: k, end: "", time: "", care: false, fete: fete(k), warn: warn(k), label: dayLong(k), sub: "libres toute la journée" }); continue; }
+      if (d === 5 && addDays(k, 2) <= w.end) continue; // vendredi déjà compris dans le week-end (samedi et dimanche dans la même période)
+      evening(k, false);
+    }
+  });
+  // Escapade : plusieurs jours de congé (Adrian et Alixia chez l'autre parent)
+  awayPeriods().filter(a => a.end >= t && a.start <= addDays(t, horizon) && Math.round((parse(a.end) - parse(a.start < t ? t : a.start)) / MS) >= 3).forEach(a => {
+    const start = a.start < t ? t : a.start;
+    out.push({ type: "escapade", date: start, end: a.end, time: "", care: false, fete: "", warn: "", label: `du ${dayLong(start)} au ${dayLong(a.end)}`, sub: `${a.holiday.replace(/ \(.*\)/, "")}${a.louanne ? " · " + a.louanne : ""}` });
+  });
+  // Garde à confirmer : Adrian et Alixia chez Yves, vendredi et samedi soir, Louanne ou Lukas à la maison
+  for (let k = t, n = 0; k <= addDays(t, 60); k = addDays(k, 1)) {
+    const d = parse(k).getDay();
+    if ((d === 5 || d === 6) && custodyOn(k) === "moi") evening(k, true);
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || (a.type === "weekend" ? -1 : 0));
+}
+
+function occHtml(x, i) {
+  const notes = [x.care ? "garde à confirmer (Louanne ou Lukas ?)" : "", x.fete, x.warn].filter(Boolean).map(esc).join(" · ");
+  return `<li class="item occrow${x.care ? " gard" : ""}"><span class="t"><span class="top">${tag(x.type)}<b>${esc(x.label)}</b></span><span class="occ-note">${esc(x.sub)}${notes ? " · " + notes : ""}</span></span><button data-slot="${i}" class="mini" aria-label="Planifier : ${esc(TYPES[x.type])}, ${esc(x.label)}">Planifier</button></li>`;
+}
+let occ = [];
+function render() {
+  renderLast();
+  occ = occasions();
+  // filtres par type d'occasion, avec le nombre
+  const counts = Object.fromEntries(Object.keys(TYPES).map(k => [k, occ.filter(x => x.type === k).length]));
+  document.getElementById("filters").innerHTML = [["", "Toutes", occ.length], ...Object.entries(TYPES).map(([k, l]) => [k, l, counts[k]])].filter(([k, , n]) => k === "" || n).map(([k, l, n]) => `<button type="button" data-filter="${k}" aria-pressed="${filter === k}">${esc(l)} (${n})</button>`).join("");
+  const shown = occ.map((x, i) => ({ x, i })).filter(o => !filter || o.x.type === filter);
+  document.getElementById("slots").innerHTML = shown.length ? shown.slice(0, 8).map(o => occHtml(o.x, o.i)).join("") : `<li class="muted">Aucune occasion de ce type dans les 5 prochains mois.</li>`;
+  document.getElementById("slotsMore").innerHTML = shown.length > 8 ? `<details><summary>${shown.length - 8} autres</summary><ul class="list">${shown.slice(8).map(o => occHtml(o.x, o.i)).join("")}</ul></details>` : "";
+  // meilleure occasion : le premier week-end, sinon le premier soir sûr (sans « garde à confirmer »)
+  const best = occ.find(x => x.type === "weekend" && !x.warn) || occ.find(x => x.type === "heures" && !x.care && !x.warn) || occ.find(x => x.type !== "escapade" && !x.warn);
+  const bx = document.getElementById("best");
+  bx.hidden = !best;
+  if (best) bx.innerHTML = `<span class="t"><b>Meilleure occasion</b><br>${tag(best.type)} ${esc(best.label)}<span class="occ-note"> · ${esc(best.sub)}</span></span><button type="button" class="primary" data-quick="${occ.indexOf(best)}">Planifier</button>`;
+  // à confirmer : sorties prévues, passées depuis moins de 15 jours, pas encore confirmées
+  const t = today(), pastRows = planned().filter(r => r.date < t && r.date >= addDays(t, -14) && !r.done);
+  document.getElementById("confirmBox").hidden = !pastRows.length;
+  document.getElementById("confirm").innerHTML = pastRows.map(r => `<li class="item"><span class="t">${esc(dayLong(r.date))}${r.note ? `<small class="note">${esc(r.note)}</small>` : ""}</span><span class="dacts"><button class="mini" data-done="${esc(r.id)}" aria-label="Sortie du ${esc(dm(r.date))} : c'était fait">C'était fait ✓</button><button class="mini" data-cancel="${esc(r.id)}" aria-label="Sortie du ${esc(dm(r.date))} : annulée">Annulée</button></span></li>`).join("");
+  const fut = planned().filter(r => r.date >= t);
+  document.getElementById("plannedBox").hidden = !fut.length;
+  document.getElementById("planned").innerHTML = fut.map(r => `<li class="item"><span class="t">${r.otype ? tag(r.otype) + " " : ""}${esc(dayLong(r.date))}${r.end && r.end !== r.date ? " au " + esc(dayLong(r.end)) : ""}${r.time ? " à " + esc(r.time.replace(":", " h ")) : ""}${r.book ? " · à réserver" : ""}${[r.note, r.care && "garde : " + r.care].filter(Boolean).map(n => `<small class="note">${esc(n)}</small>`).join("")}</span><button class="mini" data-del="${esc(r.id)}" aria-label="Supprimer la sortie du ${esc(dm(r.date))}">Supprimer</button></li>`).join("");
+  // dernières sorties (5) : sorties notées (annulables) et sorties prévues déjà passées
+  const done = [...Records.of("outing").filter(r => /^\d{4}-\d\d-\d\d$/.test(r.date || "") && r.date <= t).map(r => ({ date: r.date, id: r.id, rm: true })),
+    ...plannedAll().filter(r => r.date < t || r.done).map(r => ({ date: r.date, id: r.id, note: r.note }))].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  document.getElementById("lastBox").hidden = !done.length;
+  document.getElementById("lastList").innerHTML = done.map(d => `<li class="item"><span class="t">${esc(dayLong(d.date))} ${d.date.slice(0, 4)}${d.note ? `<small class="note">${esc(d.note)}</small>` : ""}</span>${d.rm ? `<button class="mini" data-rm="${esc(d.id)}" aria-label="Annuler la sortie du ${esc(dm(d.date))}">Annuler</button>` : ""}</li>`).join("");
+  const od = document.getElementById("outDate"); od.max = t;
+}
+
+// ---- Noter une sortie (idempotent : un seul enregistrement par jour) ---------------
+let busy = false;
+async function noteOuting(date) {
+  if (busy) return; busy = true;
+  try {
+    const plan = plannedAll().find(r => r.date === date && !r.done);
+    const p = plan ? Records.put({ ...plan, done: true }) : Records.put({ id: `out-${date}`, kind: "outing", date });
+    render(); flash(`Sortie du ${fmt(parse(date))} notée…`);
+    const ok = await p;
+    flash(ok ? `Sortie du ${fmt(parse(date))} notée ✓` : "Notée sur ce téléphone, pas encore envoyée aux autres appareils."); render();
+  } finally { busy = false; }
+}
+document.getElementById("outDone").onclick = () => noteOuting(today());
+document.getElementById("outYest").onclick = () => noteOuting(addDays(today(), -1));
+document.getElementById("outSat").onclick = () => { let k = addDays(today(), -1); while (parse(k).getDay() !== 6) k = addDays(k, -1); noteOuting(k); };
+document.getElementById("outOther").onclick = () => { const d = document.getElementById("outDate").value; if (!/^\d{4}-\d\d-\d\d$/.test(d)) return flash("Choisissez une date."); if (d > today()) return flash("Pour une sortie à venir, utilisez « Planifier »."); noteOuting(d); };
+
+// ---- Planifier : un événement du planning (Yves et Émilie), pas une tâche ----------
+const dlg = document.getElementById("dlg");
+let ctx = null;
+const $ = id => document.getElementById(id);
+function openDlg(x) {
+  ctx = x; $("dlgTitle").textContent = `Planifier : ${TYPES[x.type].toLowerCase()}`;
+  $("sDate").value = x.date; $("sDate").min = today(); $("sEnd").value = x.end || ""; $("sEnd").min = x.date; $("sTime").value = x.time || "";
+  $("sCare").value = ""; $("sNote").value = ""; $("sBook").checked = false; $("sRemindRow").hidden = true; $("sHouse").checked = false; $("sSitter").value = ""; $("sSitterRow").hidden = true;
+  $("houseBox").hidden = !(x.end && x.end !== x.date); $("dlgErr").textContent = "";
+  dlg.showModal();
+}
+$("sBook").onchange = e => { $("sRemindRow").hidden = !e.target.checked; };
+$("sHouse").onchange = e => { $("sSitterRow").hidden = !e.target.checked; };
+$("sEnd").oninput = e => { $("houseBox").hidden = !(e.target.value && e.target.value !== $("sDate").value); };
+$("sCancel").onclick = () => dlg.close();
+function build(o) {
+  return { id: Records.newId("e"), kind: "event", outing: true, otype: o.type, title: TITLES[o.type], date: o.date, end: o.end && o.end !== o.date ? o.end : "", time: o.time || "", timeEnd: "", person: "moi,emilie",
+    note: o.note || "", care: o.care || "", book: !!o.book, house: !!o.house, sitter: o.sitter || "", noschool: false, remind: o.remind || "1" };
+}
+async function save(rec, undo) {
+  if (busy) return; busy = true;
+  try {
+    const p = Records.put(rec); render(); flash("Enregistrement…");
+    const ok = await p;
+    const label = `${fmt(parse(rec.date))}${rec.end ? " au " + fmt(parse(rec.end)) : ""}`;
+    if (ok) { if (undo) flash("", `${esc(rec.title)} du ${esc(label)} ajouté au planning ✓ <button type="button" class="mini" data-undo="${esc(rec.id)}">Annuler</button>`); else flash(`${rec.title} du ${label} ajouté au planning ✓`); }
+    else flash("Enregistré sur ce téléphone, pas encore envoyé aux autres appareils (ou stockage impossible).");
+    render(); $("outFlash").focus({ preventScroll: true });
+  } finally { busy = false; }
+}
+$("dlgForm").onsubmit = async e => {
+  e.preventDefault();
+  const date = $("sDate").value, end = $("sEnd").value, err = m => { $("dlgErr").textContent = m; };
+  if (!date) return err("Choisissez une date."); if (date < today()) return err("Cette date est passée : pour une sortie déjà faite, utilisez « Noter une autre date ».");
+  if (end && end < date) return err("La date de fin précède le début.");
+  if (plannedAll().some(r => r.date === date)) return err("Une sortie est déjà prévue ce jour-là.");
+  dlg.close();
+  await save(build({ type: ctx.type, date, end, time: $("sTime").value, care: $("sCare").value.trim(), note: $("sNote").value.trim(), book: $("sBook").checked, remind: $("sBook").checked ? $("sRemind").value : "1", house: $("sHouse").checked, sitter: $("sSitter").value.trim() }), false);
+};
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return; const d = b.dataset;
+  if (d.slot !== undefined) openDlg(occ[d.slot]);
+  if (d.filter !== undefined) { filter = d.filter; try { sessionStorage.setItem("sorties-filter", filter); } catch (x) {} render(); }
+  if (d.care) $("sCare").value = d.care;
+  if (d.quick !== undefined) { const x = occ[d.quick]; if (!x) return; if (plannedAll().some(r => r.date === x.date)) return flash("Une sortie est déjà prévue ce jour-là."); save(build({ type: x.type, date: x.date, end: x.end, time: x.time }), true); }
+  if (d.undo) { await Records.remove(d.undo); flash("Sortie retirée du planning."); render(); }
+  if (d.del) { const r = planned().find(x => String(x.id) === d.del); if (r && confirm(`Supprimer la sortie du ${fmt(parse(r.date))} ?`)) { await Records.remove(r.id); render(); } }
+  if (d.rm) { if (confirm("Annuler cette sortie notée ?")) { await Records.remove(d.rm); render(); } }
+  if (d.done) { const r = plannedAll().find(x => String(x.id) === d.done); if (r) { await Records.put({ ...r, done: true }); render(); } }
+  if (d.cancel) { await Records.remove(d.cancel); render(); }
+});
+render();
+Records.refresh().then(changed => { if (changed) render(); });
+Records.watch(() => render());
+</script>
+</body>
+</html>

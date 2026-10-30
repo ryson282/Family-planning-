@@ -3,7 +3,7 @@
 // Usage : FEED_TOKEN=<secret> node scripts/build-feed.mjs <dossier du site>   -> <dossier>/ics/<jeton>/famille.ics
 // Sans FEED_TOKEN (secret GitHub), rien n'est généré. Le jeton fait partie de l'adresse : ne pas la partager.
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
-import { vevent, alarmAllDay, alarmBefore, calendar } from "./lib-ics.mjs";
+import { vevent, alarmAllDay, alarmBefore, alarmFromStart, calendar } from "./lib-ics.mjs";
 import { loadSite } from "./lib-site.mjs";
 
 const out = process.argv[2] || "dist", token = process.env.FEED_TOKEN || "";
@@ -44,13 +44,6 @@ run(`allEvents()`).filter(e => e.source === "École" && e.end >= today && e.date
   events.push(vevent({ uid: `ecole-${e.date}-${e.title}`.replace(/[^\w-]+/g, "_"), date: e.date, end: e.end, time: e.time || undefined, timeEnd: e.time ? e.timeEnd || undefined : undefined, summary, description: [e.todo, e.amount, e.note].filter(Boolean).join(" — "), alarms }));
 });
 
-// 3 bis. Événements saisis dans le site (rendez-vous, sorties, déplacements) : alarme 1 h avant, ou la veille à 18 h pour une journée entière
-run(`allEvents()`).filter(e => e.rec && e.end >= today && e.date <= limit).forEach(e => {
-  const who = names(e.person), summary = e.title + (who ? ` (${who})` : "");
-  const alarms = [e.time ? alarmBefore(60, summary) : alarmAllDay(1, 18, `Demain : ${summary}`)];
-  events.push(vevent({ uid: `site-${e.rec}`, date: e.date, end: e.end, time: e.time || undefined, timeEnd: e.time ? e.endTime || undefined : undefined, summary, description: e.note, alarms, transparent: !e.time }));
-});
-
 // 4. Tâches avec échéance (non terminées, non écartées) ; celles en retard se représentent chaque jour jusqu'à ce qu'elles soient faites.
 // Une tâche tôt le matin reçoit aussi une alarme la veille à 18 h. Un flux par personne : ses tâches et celles « à attribuer ».
 const tasks = stored.filter(t => !t.kind && !t.done && !t.dismissed && t.due);
@@ -58,18 +51,23 @@ const taskEvents = who => tasks.filter(t => !who || t.who === who || t.who === "
   const late = t.due < today, date = late ? today : t.due;
   if (date > limit) return [];
   const label = `${late ? "En retard : " : "À faire : "}${t.title}`;
-  const alarms = t.time && !late ? [alarmBefore(60, label), ...(t.time < "10:00" ? [alarmAllDay(1, 18, `Demain ${t.time.replace(":", " h ")} : ${t.title}`)] : [])] : [alarmAllDay(1, 18, `Demain : ${t.title}`), alarmAllDay(0, 8, label)];
+  const alarms = t.time && !late ? [alarmBefore(60, label), ...(t.time < "10:00" ? [alarmFromStart(t.time, 1, 18, `Demain ${t.time.replace(":", " h ")} : ${t.title}`)] : [])] : [alarmAllDay(1, 18, `Demain : ${t.title}`), alarmAllDay(0, 8, label)];
   return [vevent({ uid: `tache-${t.id}`, date, time: late ? undefined : t.time, timeEnd: undefined, summary: label, description: names(t.who) ? `Pour : ${names(t.who)}` : "", alarms, transparent: true })];
 });
 const known = new Set(stored.filter(t => !t.kind).map(t => t.title));
 
-// 4 bis. Événements saisis dans le site (rendez-vous, sorties, déplacements) : alarme 1 h avant (et la veille à 18 h avant 10 h),
-// ou la veille à 18 h pour une journée entière ; « Me prévenir » ajoute un rappel 1, 2 ou 7 jours avant.
+// 4 bis. Événements saisis dans le site (rendez-vous, sorties, déplacements). Alarme 1 h avant ; avant 10 h, un rappel la veille à 18 h ;
+// journée entière : la veille à 18 h. « Me prévenir » ajoute un rappel 1, 3, 7 ou 14 jours avant (18 h), calculé depuis l'heure de début.
+// Une sortie à deux sans heure de fin dure 3 h ; son titre ne répète pas les personnes (« Sortie à deux »).
+const plus3h = t => `${String(Math.min(23, Number(t.slice(0, 2)) + 3)).padStart(2, "0")}:${Number(t.slice(0, 2)) + 3 > 23 ? "59" : t.slice(3, 5)}`;
+const days = n => `${n} jour${n > 1 ? "s" : ""}`;
 run(`allEvents()`).filter(e => e.rec && e.end >= today && e.date <= limit).forEach(e => {
-  const who = names(e.person), summary = e.title + (who ? ` (${who})` : ""), rec = stored.find(r => String(r.id) === String(e.rec)) || {};
-  const alarms = e.time ? [alarmBefore(60, summary), ...(e.time < "10:00" ? [alarmAllDay(1, 18, `Demain ${e.time.replace(":", " h ")} : ${summary}`)] : [])] : [alarmAllDay(1, 18, `Demain : ${summary}`)];
-  const n = Number(rec.remind) || 0; if (n > 1 || (n === 1 && e.time)) alarms.push(alarmAllDay(n, 18, `Dans ${n} jours : ${summary}`));
-  events.push(vevent({ uid: `site-${e.rec}`, date: e.date, end: e.end, time: e.time || undefined, timeEnd: e.time ? e.endTime || undefined : undefined, summary, description: e.note, alarms, transparent: !e.time }));
+  const rec = stored.find(r => String(r.id) === String(e.rec)) || {}, who = names(e.person), summary = rec.outing ? e.title : e.title + (who ? ` (${who})` : "");
+  const n = Number(rec.remind) || 0, early = e.time && e.time < "10:00";
+  const alarms = e.time ? [alarmBefore(60, summary), ...(early ? [alarmFromStart(e.time, 1, 18, `Demain ${e.time.replace(":", " h ")} : ${summary}`)] : [])] : [alarmAllDay(1, 18, `Demain : ${summary}`)];
+  if (n > 1 || (n === 1 && e.time && !early)) alarms.push(e.time ? alarmFromStart(e.time, n, 18, n === 1 ? `Demain : ${summary}` : `Dans ${days(n)} : ${summary}`) : alarmAllDay(n, 18, `Dans ${days(n)} : ${summary}`));
+  const timeEnd = e.time ? e.endTime || (rec.outing ? plus3h(e.time) : undefined) : undefined;
+  events.push(vevent({ uid: `site-${e.rec}`, date: e.date, end: e.end, time: e.time || undefined, timeEnd, summary, description: [e.note, rec.care && `Garde des enfants : ${rec.care}`].filter(Boolean).join(" — "), alarms, transparent: !e.time }));
 });
 
 // 5. Rappels annuels (tâches annuelles et échéances du foyer) pas encore ajoutés à la liste : placés À L'ÉCHÉANCE, avec des alarmes à
@@ -77,7 +75,7 @@ run(`allEvents()`).filter(e => e.rec && e.end >= today && e.date <= limit).forEa
 run(`annualTasks(${JSON.stringify(today)}, { all: true })`).filter(a => !known.has(a.title) && a.start <= limit).forEach(a => {
   const target = a.target || a.start, late = target < today, date = late ? today : target, alarms = [];
   if (late) alarms.push(alarmAllDay(0, 9, `Date dépassée : ${a.title}`));
-  else [30, 14, 7, 1].filter(o => o <= Math.max(a.lead || 14, 14) && run(`addDays(${JSON.stringify(target)}, ${-o})`) >= today).forEach(o => alarms.push(alarmAllDay(o, o === 1 ? 18 : 9, o === 1 ? `Demain : ${a.title}` : `Dans ${o} jours : ${a.title}`)));
+  else [30, 14, 7, 1].filter(o => o <= Math.max(a.lead || 14, 14) && run(`addDays(${JSON.stringify(target)}, ${-o})`) >= today).forEach(o => alarms.push(alarmAllDay(o, o === 1 ? 18 : 9, o === 1 ? `Demain : ${a.title}` : `Dans ${days(o)} : ${a.title}`)));
   events.push(vevent({ uid: `annuel-${a.title}`.replace(/[^\w-]+/g, "_"), date, summary: `${late ? "Date dépassée : " : "Rappel : "}${a.title}`, description: [names(a.who) && `Pour : ${names(a.who)}`, a.note].filter(Boolean).join(" — "), alarms }));
 });
 

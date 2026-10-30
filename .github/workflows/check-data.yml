@@ -21,6 +21,7 @@ jobs:
       - name: Flux iCal (génération à blanc, sans réseau)
         env:
           FEED_TOKEN: ci-check-0123456789
+          FEED_DRY_RUN: "1" # base volontairement injoignable : on vérifie seulement que le flux se génère
           SYNC_URL: http://127.0.0.1:9
           SYNC_KEY: x
         run: node scripts/build-feed.mjs "$RUNNER_TEMP/feed"

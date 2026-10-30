@@ -1,6 +1,8 @@
 // Horaires habituels en temps scolaire (hors congés). Jours : 1 = lundi ... 5 = vendredi. Heures "HH:MM".
 // À compléter : Louanne (jours de cours, autres activités) et Émilie (autres activités éventuelles).
+// Horaires valables pour l'année scolaire 2026-2027 : à revoir pour la rentrée 2027 (classes, horaires, activités). Le site le rappelle 60 jours avant.
 window.SCHEDULES = {
+  validUntil: "2027-08-29",
   // Deux voitures : la Dacia d'Yves et la Kia d'Émilie.
   cars: { Dacia: "moi", Kia: "emilie" },
   // Yves : télétravail tous les jours sauf le mardi (train pour Bruxelles).

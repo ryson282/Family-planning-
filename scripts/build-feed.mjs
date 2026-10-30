@@ -10,7 +10,9 @@ const out = process.argv[2] || "dist", token = process.env.FEED_TOKEN || "";
 if (token.length < 16) { console.log("::warning::FEED_TOKEN absent ou trop court (16 caractères minimum) : flux iCal non généré."); process.exit(0); }
 if (!/^[A-Za-z0-9_-]+$/.test(token)) { console.error("FEED_TOKEN ne doit contenir que des lettres, chiffres, - et _."); process.exit(1); }
 
-const { ctx, run, stored, today, names } = await loadSite();
+const { ctx, run, stored, recordsOk, today, names } = await loadSite();
+// Base illisible : on ne publie pas un flux sans les tâches (Google Agenda retirerait les rappels). L'ancien flux reste en place.
+if (!recordsOk) { console.error("::error::Base Supabase illisible : flux iCal non généré (le précédent reste valable)."); process.exit(1); }
 const horizon = 400, limit = run(`addDays(${JSON.stringify(today)}, ${horizon})`);
 const events = [];
 const TITLES = { moi: "Garde A² chez Yves", autre: "A² chez Emeline", echange: "Jour d'échange A²" }; // le prénom n'apparaît que dans ce flux privé (comme l'export de garde)

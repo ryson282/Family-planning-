@@ -68,6 +68,10 @@
         <button class="primary">Enregistrer</button>
         <button type="button" id="syncOff">Désactiver</button>
       </form>
+      <h3 class="sub" style="margin:14px 0 4px;font-size:.9rem">Sauvegarde</h3>
+      <p class="muted">Un fichier avec toutes vos données (tâches, événements, exceptions de garde, décisions de vacances, échéances) : à garder si le navigateur est effacé ou le téléphone changé.</p>
+      <div class="dacts"><button type="button" id="exportBtn">Exporter (fichier)</button><label class="check" style="margin:0"><span class="mini" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px;cursor:pointer">Importer…</span><input type="file" id="importFile" accept="application/json,.json" class="sr"></label></div>
+      <p class="muted" id="backupMsg" aria-live="polite"></p>
     </details>
   </section>
 </main>
@@ -104,6 +108,7 @@ const save = () => { Records.saveLocal(tasks); Records.apply(tasks); };
 const people = [{ id: "famille", name: "Famille" }, ...(window.PEOPLE || [])];
 const opts = people.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
 document.getElementById("who").innerHTML = opts;
+document.getElementById("due").value = addDays(iso(new Date()), 1); // une tâche sans date n'est jamais rappelée : demain par défaut
 document.getElementById("filter").insertAdjacentHTML("beforeend", opts);
 const nameOf = id => (people.find(p => p.id === id) || {}).name || id;
 const nowMs = () => taskSync.now();
@@ -170,8 +175,8 @@ function add(t) {
 // Synchronisation (si configurée) : les erreurs réseau n'empêchent pas de travailler en local.
 const stateEl = document.getElementById("syncState");
 const setState = (txt, bad) => { stateEl.textContent = txt; stateEl.style.color = bad ? "var(--diff)" : ""; };
-async function remotePush(t) { if (!taskSync.config()) return; try { await taskSync.push(t); setState("✓ synchronisé"); } catch (e) { setState("⚠ hors ligne : sera renvoyé à la prochaine synchronisation", true); } }
-async function remoteRemove(ids) { ids = [].concat(ids); ids.forEach(i => taskSync.markDeleted(i)); if (!taskSync.config()) return; try { await taskSync.remove(ids); setState("✓ synchronisé"); } catch (e) { setState("⚠ hors ligne : suppression renvoyée plus tard", true); } }
+async function remotePush(t) { if (!taskSync.config()) return; try { await taskSync.push(t); setState("✓ synchronisé"); } catch (e) { setState("⚠ hors ligne : sera renvoyé à la prochaine synchronisation", true); } renderStatus(); }
+async function remoteRemove(ids) { ids = [].concat(ids); ids.forEach(i => taskSync.markDeleted(i)); if (!taskSync.config()) return; try { await taskSync.remove(ids); setState("✓ synchronisé"); } catch (e) { setState("⚠ hors ligne : suppression renvoyée plus tard", true); } renderStatus(); }
 async function runSync() {
   if (!taskSync.config()) { setState("(désactivée)"); return; }
   try {
@@ -179,6 +184,7 @@ async function runSync() {
     if (!list) return; // une synchronisation est déjà en cours
     tasks = list; save(); render(); setState("✓ synchronisé " + new Date().toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" }));
   } catch (e) { setState("⚠ synchronisation impossible (" + e.message + ")", true); }
+  renderStatus();
 }
 
 // Nettoyage : les tâches de planning liées à une période (garde, vacances, Lana, sorties) et les suggestions écartées sont supprimées
@@ -236,17 +242,17 @@ document.getElementById("f").onsubmit = e => {
   const v = document.getElementById("title").value.trim();
   if (!v) return;
   add({ title: v, who: document.getElementById("who").value, cat: document.getElementById("cat").value, due: document.getElementById("due").value, time: document.getElementById("time").value || undefined });
-  e.target.reset();
+  e.target.reset(); document.getElementById("due").value = addDays(iso(new Date()), 1);
 };
 document.addEventListener("click", e => {
   const d = (e.target.closest("button") || {}).dataset;
   if (!d) return;
-  if (d.del) { const id = d.del; tasks = tasks.filter(t => String(t.id) !== id); save(); render(); remoteRemove(id); }
-  if (d.snooze) { const t = tasks.find(t => String(t.id) === d.snooze); if (t) { t.due = addDays(t.due > iso(new Date()) ? t.due : iso(new Date()), 7); t.updated = nowMs(); save(); render(); remotePush(t); } }
+  if (d.del) { const id = d.del, t0 = tasks.find(t => String(t.id) === id); if (t0 && !confirm(`Supprimer « ${t0.title} » ?`)) return; tasks = tasks.filter(t => String(t.id) !== id); save(); render(); remoteRemove(id); }
+  if (d.snooze) { const t = tasks.find(t => String(t.id) === d.snooze); if (t) { t.due = addDays(t.due > iso(new Date()) ? t.due : iso(new Date()), 7); if (t.until && t.until < t.due) t.until = t.due; t.updated = nowMs(); save(); render(); remotePush(t); } }
   if (d.s) { const x = window._s[d.s]; if (x) add({ ...x, key: x.title }); }
   if (d.x) { const x = window._s[d.x]; if (x) add({ ...x, key: x.title, dismissed: true, done: true }); }
   if (d.p) { const x = window._s[d.p]; if (x && x.plan) openPlan(x); }
-  if (d.dd) { Records.remove(d.dd).then(() => { tasks = Records.local(); render(); }); }
+  if (d.dd) { const r0 = Records.of("deadline", tasks).find(r => String(r.id) === d.dd); if (r0 && !confirm(`Supprimer l'échéance « ${r0.title} » ?`)) return; Records.remove(d.dd).then(() => { tasks = Records.local(); render(); }); }
   if (d.o) { const o = window._o[d.o]; if (o) add({ title: o.title, who: "moi", cat: "Sorties", due: o.due, until: o.until, key: o.title }); }
 });
 document.addEventListener("change", e => {
@@ -304,6 +310,24 @@ document.getElementById("dueForm").onsubmit = async e => {
   if (!title || !date) return;
   await Records.put({ id: Records.newId("d"), kind: "deadline", title, date, every: +document.getElementById("dueEvery").value, lead: +document.getElementById("dueLead").value, who: document.getElementById("dueWho").value, cat: "Administratif" });
   tasks = Records.local(); e.target.reset(); render();
+};
+document.getElementById("exportBtn").onclick = () => {
+  const blob = new Blob([JSON.stringify({ app: "famille", exported: new Date().toISOString(), records: Records.local() }, null, 1)], { type: "application/json" }), a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `famille-sauvegarde-${iso(new Date())}.json`; document.body.appendChild(a); a.click(); a.remove();
+  document.getElementById("backupMsg").textContent = `Exporté : ${Records.local().length} enregistrements.`;
+};
+document.getElementById("importFile").onchange = async e => {
+  const f = e.target.files[0], msg = document.getElementById("backupMsg"); if (!f) return;
+  try {
+    const d = JSON.parse(await f.text()), list = Array.isArray(d) ? d : d.records;
+    if (!Array.isArray(list)) throw new Error("format inconnu");
+    const ok = list.filter(r => r && typeof r === "object" && r.id !== undefined && r.id !== null);
+    if (!ok.length || !confirm(`Importer ${ok.length} enregistrements ? Ceux qui existent déjà seront remplacés.`)) { msg.textContent = "Import annulé."; return; }
+    const ids = new Set(ok.map(r => String(r.id)));
+    tasks = [...tasks.filter(t => !ids.has(String(t.id))), ...ok.map(r => ({ ...r, id: String(r.id), updated: nowMs() }))];
+    save(); render(); msg.textContent = `Importé : ${ok.length} enregistrements.`; runSync();
+  } catch (err) { msg.textContent = "Fichier illisible (" + err.message + ")."; }
+  e.target.value = "";
 };
 document.getElementById("syncForm").onsubmit = e => { e.preventDefault(); taskSync.setConfig(syncUrl.value, syncKey.value); syncKey.value = ""; runSync(); };
 document.getElementById("syncOff").onclick = () => { taskSync.disable(); syncUrl.value = ""; setState("(désactivée)"); };

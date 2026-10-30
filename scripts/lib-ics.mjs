@@ -1,5 +1,5 @@
 // Outils iCalendar (RFC 5545) partagés par les scripts : échappement, pliage des lignes, événements, alarmes.
-export const icsText = t => String(t).replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+export const icsText = t => String(t).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 // Pliage à 75 octets (UTF-8), les lignes suivantes commencent par une espace.
 export function fold(line) {
   const enc = new TextEncoder(), parts = []; let cur = "", limit = 75;

@@ -18,8 +18,8 @@ const keep = e => {
 };
 
 // Contenu précédent : sert à garder un agenda qui échoue, à refuser un résultat vide suspect et à ne réécrire que si quelque chose change.
-let old = { events: [], updated: "" };
-if (existsSync(OUT)) { const c = vm.createContext({ window: {} }); c.window = c; try { vm.runInContext(readFileSync(OUT, "utf8"), c); old = { events: c.CALENDAR_EVENTS || [], updated: c.CALENDAR_UPDATED || "" }; } catch (e) {} }
+let old = { events: [], updated: "", agendas: {} };
+if (existsSync(OUT)) { const c = vm.createContext({ window: {} }); c.window = c; try { vm.runInContext(readFileSync(OUT, "utf8"), c); old = { events: c.CALENDAR_EVENTS || [], updated: c.CALENDAR_UPDATED || "", agendas: c.CALENDAR_AGENDAS || {} }; } catch (e) {} }
 
 const entries = (process.env.ICS_URLS || "").split("\n").map(l => l.trim()).filter(Boolean);
 if (!entries.length) { console.error("ICS_URLS est vide."); process.exit(1); }
@@ -64,32 +64,35 @@ function readAgenda(name, text) {
   return out;
 }
 
-const events = [];
+const events = [], agendas = {}, nowIso = new Date().toISOString();
 let failed = 0;
 for (const [i, entry] of entries.entries()) {
   const k = entry.indexOf("|"), name = k > 0 ? entry.slice(0, k) : `Agenda ${i + 1}`, url = (k > 0 ? entry.slice(k + 1) : entry).trim();
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const got = readAgenda(name, await res.text()).filter(keep);
+    const all = readAgenda(name, await res.text()), got = all.filter(keep);
+    // Un titre de garde mal saisi (« A2-> Emeline », « A²-> Yves (malade) ») est écarté par le filtre : on le signale plutôt que de le perdre en silence.
+    if (only[name] === "custody") all.filter(e => !keep(e) && /^\s*A\S{0,2}\s*[-–—]+\s*>/i.test(e.title)).forEach(e => console.log(`::warning::Agenda « ${name} » : titre de garde non reconnu « ${e.title} » (${e.start.slice(0, 10)}) : écarté. Format attendu : « A²-> Yves » ou « A²-> Emeline ».`));
     const prev = old.events.filter(e => e.calendar === name);
     if (!got.length && prev.length) throw new Error(`réponse sans aucun événement alors que ${prev.length} étaient connus`);
-    events.push(...got);
+    events.push(...got); agendas[name] = nowIso;
   } catch (e) {
     failed++;
     const prev = old.events.filter(x => x.calendar === name);
     console.log(`::warning::Agenda « ${name} » non mis à jour (${e.message}) : ${prev.length} événement(s) précédent(s) conservé(s).`);
-    events.push(...prev);
+    events.push(...prev); agendas[name] = old.agendas[name] || old.updated || nowIso; // date du dernier succès de CET agenda
   }
 }
 if (failed === entries.length) { console.error("Aucun agenda n'a pu être lu : fichier inchangé."); process.exit(1); }
 
 events.sort((a, b) => a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
-const unchanged = JSON.stringify(events) === JSON.stringify(old.events);
+const unchanged = JSON.stringify(events) === JSON.stringify(old.events) && JSON.stringify(agendas) === JSON.stringify(old.agendas);
 const fresh = old.updated && Date.now() - Date.parse(old.updated) < HEARTBEAT_MS;
 if (unchanged && fresh) { console.log(`${events.length} événements, aucun changement : fichier non réécrit.`); process.exit(0); }
 const js = `// Fichier généré par scripts/fetch-calendar.mjs (GitHub Action). Ne pas modifier à la main.\n` +
   `window.CALENDAR_UPDATED = ${JSON.stringify(new Date().toISOString())};\n` +
+  `window.CALENDAR_AGENDAS = ${JSON.stringify(agendas)};\n` +
   `window.CALENDAR_EVENTS = ${JSON.stringify(events)};\n`;
 writeFileSync(OUT + ".tmp", js); renameSync(OUT + ".tmp", OUT); // écriture atomique
 console.log(`${events.length} événements écrits${unchanged ? " (rafraîchissement quotidien de la date)" : ""}.`);

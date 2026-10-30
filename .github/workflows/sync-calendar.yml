@@ -17,6 +17,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # un téléchargement qui ne répond pas ne doit pas bloquer les autres synchronisations
     env:
       TZ: Europe/Brussels # les heures des événements sont celles de Bruxelles
     steps:
@@ -29,6 +30,8 @@ jobs:
         env:
           ICS_URLS: ${{ secrets.ICS_URLS }}
         run: node scripts/fetch-calendar.mjs
+      - name: Contrôler les données (rien n'est enregistré si elles sont invalides)
+        run: node scripts/check-data.mjs
       - name: Enregistrer si modifié
         id: commit
         run: |

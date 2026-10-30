@@ -10,7 +10,8 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "20 4 * * *" # une publication par jour : le flux iCal (tâches en retard, alertes de garde) est recalculé
+    - cron: "20 4 * * *" # deux publications par jour : le flux iCal (tâches en retard, alertes de garde) est recalculé le matin
+    - cron: "20 17 * * *" # et en fin d'après-midi (tâches ajoutées ou terminées dans la journée, rappels de la veille)
   workflow_dispatch:
 
 permissions:
@@ -23,6 +24,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -53,6 +55,7 @@ jobs:
           cp -r assets data dist/
       - name: Flux iCal des rappels (si le secret FEED_TOKEN existe)
         if: steps.cfg.outputs.ready == 'true'
+        continue-on-error: true # base illisible : on ne publie pas un flux sans les tâches (l'ancien flux reste dans Google Agenda), mais le site est quand même publié
         env:
           FEED_TOKEN: ${{ secrets.FEED_TOKEN }}
         run: node scripts/build-feed.mjs dist

@@ -11,7 +11,8 @@
 const Records = (() => {
   const KEY = "family-tasks-v1";
   const local = () => { try { const v = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(v) ? v.filter(t => t && typeof t === "object") : []; } catch (e) { return []; } };
-  const saveLocal = list => { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} };
+  const saveLocal = list => { try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch (e) { return false; } }; // false : stockage plein ou bloqué, la saisie ne survivrait pas au rechargement
+const status = () => { if (typeof renderStatus === "function") renderStatus(); };
   const of = (kind, list = local()) => list.filter(t => t.kind === kind);
   const stamp = () => (typeof taskSync !== "undefined" ? taskSync.now() : Date.now());
 
@@ -31,14 +32,17 @@ const Records = (() => {
   // Ajoute ou remplace un enregistrement : mémoire locale, puis envoi (si la synchronisation est configurée).
   async function put(rec) {
     const r = { ...rec, updated: stamp() }, list = local().filter(t => String(t.id) !== String(r.id));
-    list.push(r); saveLocal(list); apply(list);
-    if (typeof taskSync !== "undefined" && taskSync.config()) { try { await taskSync.push(r); } catch (e) { return false; } }
+    list.push(r); const saved = saveLocal(list); apply(list);
+    if (!saved) { status(); return false; }
+    if (typeof taskSync !== "undefined" && taskSync.config()) { try { await taskSync.push(r); } catch (e) { status(); return false; } }
+    status();
     return true;
   }
   async function remove(id) {
-    const list = local().filter(t => String(t.id) !== String(id)); saveLocal(list); apply(list);
-    if (typeof taskSync !== "undefined") { taskSync.markDeleted(id); if (taskSync.config()) { try { await taskSync.remove(id); } catch (e) { return false; } } }
-    return true;
+    const list = local().filter(t => String(t.id) !== String(id)); const saved = saveLocal(list); apply(list);
+    if (typeof taskSync !== "undefined") { taskSync.markDeleted(id); if (taskSync.config()) { try { await taskSync.remove(id); } catch (e) { status(); return false; } } }
+    status();
+    return saved;
   }
   // Synchronise avec Supabase et applique le résultat ; retourne true si quelque chose a changé.
   async function refresh() {
@@ -50,6 +54,22 @@ const Records = (() => {
       return JSON.stringify(list) !== before;
     } catch (e) { return false; }
   }
+  // Au retour sur la page (application rouverte, réseau revenu, minuit passé) : nouvelle synchronisation, puis onChange({ newDay, changed }).
+  function watch(onChange) {
+    let day = iso(new Date()), busy = false;
+    const tick = async () => {
+      if (busy) return; busy = true;
+      try {
+        const today = iso(new Date()), newDay = today !== day; day = today;
+        const changed = await refresh();
+        status();
+        if (newDay || changed) onChange({ newDay, changed });
+      } finally { busy = false; }
+    };
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
+    addEventListener("focus", tick); addEventListener("online", tick);
+    setInterval(() => { if (document.visibilityState !== "hidden") tick(); }, 60000);
+  }
   const newId = prefix => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  return { local, saveLocal, of, apply, put, remove, refresh, newId };
+  return { local, saveLocal, of, apply, put, remove, refresh, watch, newId };
 })();

@@ -123,3 +123,8 @@ ul.plain{margin:0;padding-left:18px}.hol .two{display:grid;grid-template-columns
 .dact .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}fieldset.checks{border:0;margin:6px 0;padding:0}fieldset.checks legend{padding:0 0 4px;font-size:.9rem}
 .list li .dacts{margin:4px 0 0;flex:0 0 100%}
 @media(max-width:640px){.dact .two{grid-template-columns:1fr}}
+
+/* Fiabilité : bandeau d'état, formulaires qui tiennent dans l'écran, titres longs */
+.statusbar{max-width:1000px;margin:0 auto;padding:8px 16px 0}.statusbar:empty{display:none}.statusbar .alert{margin:0 0 6px}
+@media(max-width:640px){.statusbar{padding:6px 10px 0}form.add{grid-template-columns:1fr 1fr}form.add input:first-child,form.add button.primary{grid-column:1/-1}}
+.t,.note,.wchip,.ev{overflow-wrap:anywhere;min-width:0}

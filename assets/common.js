@@ -308,31 +308,33 @@ function schoolTodos(today, { all = false, lead = 30 } = {}) {
 // Tâches annuelles (data/recurring-tasks.js) et échéances propres au foyer (enregistrements « deadline ») : prochaine occurrence encore à faire.
 // all = true : toutes, même hors de leur fenêtre d'anticipation (flux iCal). Sinon seulement celles à moins de `lead` jours.
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+// Une occurrence dépassée reste proposée pendant `grace` jours (30 par défaut) : sinon un entretien oublié disparaîtrait sans trace le lendemain.
+const GRACE_DAYS = 30;
 function nextOccurrence(r, today) {
-  const y0 = +today.slice(0, 4);
-  for (let y = y0; y <= y0 + 12; y++) {
+  const y0 = +today.slice(0, 4), grace = r.grace === undefined ? GRACE_DAYS : r.grace;
+  for (let y = y0 - 1; y <= y0 + 12; y++) {
     if (r.every && (y - (r.from || 0)) % r.every !== 0) continue;
     const start = iso(new Date(y, r.month - 1, r.day || 1)), end = r.day ? start : iso(new Date(y, r.month, 0));
-    if (end >= today) return { start, year: y, due: start < today ? today : start };
+    if (addDays(end, grace) >= today) return { start, end, year: y, due: start < today ? today : start, late: end < today };
   }
   return null;
 }
 function annualTasks(today, { all = false } = {}) {
   const out = [];
   (window.RECURRING_TASKS || []).forEach(r => {
-    const o = nextOccurrence(r, today), lead = r.lead || 60;
+    const o = nextOccurrence(r, today), lead = r.lead === undefined ? 60 : r.lead;
     if (!o || (!all && o.start > addDays(today, lead))) return;
     const when = r.day ? `${r.day} ${MONTHS_FR[r.month - 1]}` : MONTHS_FR[r.month - 1];
-    out.push({ title: `${r.title}${r.check ? " (à vérifier)" : ""} (${when} ${o.year})`, cat: r.cat, who: r.who, due: o.due, start: o.start, lead, until: addDays(o.due, 60), recurring: true, note: r.note });
+    out.push({ title: `${r.title}${r.check ? " (à vérifier)" : ""} (${when} ${o.year})`, cat: r.cat, who: r.who, due: o.due, start: o.start, target: o.end, lead, until: addDays(o.end, 60), recurring: true, note: o.late ? [r.note, "date dépassée : à faire dès que possible"].filter(Boolean).join(" — ") : r.note });
   });
   (window.HOUSEHOLD_DEADLINES || []).forEach(d => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date || "")) return;
     let date = d.date;
     for (let i = 0; i < 40 && date < today && d.every; i++) date = iso(new Date(+date.slice(0, 4) + d.every, +date.slice(5, 7) - 1, +date.slice(8)));
     if (date < today) return;
-    const lead = d.lead || 60;
+    const lead = d.lead === undefined ? 60 : d.lead;
     if (!all && date > addDays(today, lead)) return;
-    out.push({ title: `${d.title} (${fmt(parse(date))} ${date.slice(0, 4)})`, cat: d.cat || "Administratif", who: d.who || "famille", due: date, start: date, lead, until: addDays(date, 60), recurring: true, note: d.note, deadline: d.id });
+    out.push({ title: `${d.title} (${fmt(parse(date))} ${date.slice(0, 4)})`, cat: d.cat || "Administratif", who: d.who || "famille", due: date, start: date, target: date, lead, until: addDays(date, 60), recurring: true, note: d.note, deadline: d.id });
   });
   return out;
 }
@@ -357,8 +359,37 @@ function lateCount() {
     return (JSON.parse(localStorage.getItem("family-tasks-v1") || "[]") || []).filter(x => x && !x.kind && !x.done && !x.dismissed && x.due && x.due < t).length;
   } catch (e) { return 0; }
 }
+// Bandeau d'état en haut de chaque page : ce qui peut rendre le planning faux sans que personne ne le voie
+// (modifications non envoyées, agenda non synchronisé, données qui s'arrêtent, horaires périmés).
+function healthMessages(today = iso(new Date())) {
+  const out = [], days = n => `${n} jour${n > 1 ? "s" : ""}`, ago = d => Math.floor((Date.parse(today + "T12:00:00") - Date.parse(String(d).slice(0, 10) + "T12:00:00")) / 86400000);
+  if (typeof taskSync !== "undefined" && taskSync.config()) {
+    const n = taskSync.pending();
+    if (n) out.push({ lvl: "warn", text: n > 1 ? `⚠ ${n} modifications pas encore envoyées aux autres appareils : elles partiront dès que la connexion revient.` : "⚠ 1 modification pas encore envoyée aux autres appareils : elle partira dès que la connexion revient." });
+    if (taskSync.note) out.push({ lvl: "warn", text: taskSync.note });
+  }
+  const agendas = window.CALENDAR_AGENDAS || {}, names = Object.keys(agendas);
+  const stale = (names.length ? names.map(n => ({ n, d: agendas[n] })) : window.CALENDAR_UPDATED ? [{ n: "", d: window.CALENDAR_UPDATED }] : []).filter(x => ago(x.d) >= 3);
+  stale.forEach(x => out.push({ lvl: "bad", text: `⚠ ${x.n ? "L'agenda « " + calendarLabel(x.n) + " »" : "Les agendas"} n'a pas été synchronisé depuis ${days(ago(x.d))} : les changements de garde récents peuvent manquer.` }));
+  const lastEv = (window.SCHOOL_EVENTS || []).filter(e => e.person !== "louanne").map(e => e.end || e.date).sort().pop();
+  if (lastEv && lastEv < addDays(today, 120)) out.push({ lvl: "warn", text: `Événements scolaires connus jusqu'au ${fmt(parse(lastEv))} ${lastEv.slice(0, 4)} : à compléter pour la suite.` });
+  const custody = (window.CALENDAR_EVENTS || []).filter(isCustodyEvent).map(e => e.start.slice(0, 10)).sort().pop();
+  if (custody && custody < addDays(today, 60)) out.push({ lvl: "warn", text: `Garde réelle connue jusqu'au ${fmt(parse(custody))} ${custody.slice(0, 4)} : la suite est estimée d'après le rythme habituel.` });
+  const valid = window.SCHEDULES && window.SCHEDULES.validUntil;
+  if (valid && today > addDays(valid, -60)) out.push({ lvl: today > valid ? "bad" : "warn", text: `Horaires de la semaine type valables jusqu'au ${fmt(parse(valid))} ${valid.slice(0, 4)} : à revoir pour la rentrée (classes, horaires, activités).` });
+  const lastHol = (window.SCHOOL_HOLIDAYS || []).map(h => h.end).sort().pop();
+  if (lastHol && lastHol < addDays(today, 300)) out.push({ lvl: "warn", text: `Congés scolaires connus jusqu'au ${fmt(parse(lastHol))} ${lastHol.slice(0, 4)} : à compléter.` });
+  return out;
+}
+function renderStatus() {
+  const el = document.getElementById("statusBar"); if (!el) return;
+  el.innerHTML = healthMessages().map(m => `<p class="alert ${m.lvl === "bad" ? "" : "warn"}" role="status">${esc(m.text)}</p>`).join("");
+}
+
 function nav(active) {
   const n = lateCount(), link = (href, id, label) => `<a href="${href}" class="${active === id ? "on" : ""}">${label}</a>`;
   document.querySelector("header").insertAdjacentHTML("beforeend",
     `<nav>${link("index.html", "p", "Planning")}${link("semaine.html", "s", "Semaine type")}${link("vacances.html", "v", "Vacances")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}</span>` : ""}`)}</nav>`);
+  const bar = document.createElement("div"); bar.id = "statusBar"; bar.className = "statusbar"; document.querySelector("header").after(bar);
+  renderStatus();
 }

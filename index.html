@@ -204,11 +204,13 @@ function renderHome() {
   const dayOf = k => WeekView.model(WeekView.mondayOf(k), events, careByDay).days.find(d => d.k === k);
   const long = k => parse(k).toLocaleDateString("fr-BE", { weekday: "long", day: "numeric", month: "long" });
   const tasks = Records.local().filter(t => !t.kind && !t.dismissed && !t.done), range = (a, b) => (a === b ? fmt(parse(a)) : `du ${fmt(parse(a))} au ${fmt(parse(b))}`);
+  const undated = tasks.filter(t => !t.due);
   const late = tasks.filter(t => t.due && t.due < today), soon = tasks.filter(t => t.due && t.due >= today && t.due <= addDays(today, 3));
   const list = a => a.slice(0, 3).map(t => esc(t.title)).join(" · ") + (a.length > 3 ? " …" : "");
   const alerts = [];
   if (late.length) alerts.push(["bad", `<a href="taches.html">⚠ ${late.length} tâche${late.length > 1 ? "s" : ""} en retard</a> : ${list(late)}`]);
   if (soon.length) alerts.push(["warn", `<a href="taches.html">${soon.length} tâche${soon.length > 1 ? "s" : ""} à faire d'ici 3 jours</a> : ${list(soon)}`]);
+  if (undated.length) alerts.push(["warn", `<a href="taches.html">${undated.length} tâche${undated.length > 1 ? "s" : ""} sans date</a> : ${list(undated)}`]);
   childcareGaps().filter(g => g.end >= today && g.start <= addDays(today, 14)).forEach(g => alerts.push(["bad", `<a href="taches.html">Garde de A² à organiser</a> ${range(g.start, g.end)} (${esc(g.holiday.replace(/ \(.*\)/, ""))})`]));
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today && a.start <= addDays(today, 30)).forEach(a => alerts.push(["bad", `<a href="taches.html">Qui garde Lana ?</a> ${range(a.start, a.end)}`]));
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances" && h.end >= today && h.start <= addDays(today, 42)).forEach(h => {
@@ -293,7 +295,13 @@ const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.data
 document.getElementById("grid").addEventListener("click", pick);
 document.getElementById("grid").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
 render(); upcoming(); renderHome();
-Records.refresh().then(changed => { if (changed) { recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek(); } });
+// Synchronisation au chargement, puis à chaque retour sur la page (application rouverte, réseau revenu, minuit passé).
+const redraw = () => { recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek(); };
+Records.refresh().then(changed => { if (changed) redraw(); });
+Records.watch(({ newDay }) => {
+  if (newDay) { selDay = todayIso(); cur = new Date(); cur.setDate(1); weekStart = WeekView.mondayOf(todayIso()); } // la page est restée ouverte : « aujourd'hui » avance
+  redraw();
+});
 try { if (sessionStorage.getItem("planning-view") === "week") setView("week"); } catch (e) {}
 </script>
 </body>

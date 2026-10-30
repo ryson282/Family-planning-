@@ -4,7 +4,7 @@ import vm from "node:vm";
 import { readFileSync, readdirSync } from "node:fs";
 
 export async function loadSite() {
-  let stored = [];
+  let stored = [], recordsOk = true;
   const ctx = vm.createContext({ document: {}, console, localStorage: { getItem: () => JSON.stringify(stored), setItem() {} } });
   ctx.window = ctx;
   const load = f => vm.runInContext(readFileSync(f, "utf8"), ctx, { filename: f });
@@ -17,10 +17,10 @@ export async function loadSite() {
       const res = await fetch(`${cfg.url}/rest/v1/family_tasks?select=id,data`, { headers: { apikey: cfg.key, Authorization: "Bearer " + cfg.key }, signal: AbortSignal.timeout(20000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       stored = (await res.json()).map(r => r && r.data).filter(d => d && typeof d === "object" && d.id !== undefined);
-    } catch (e) { console.error(`::warning::Enregistrements non lus dans Supabase (${e.message}) : résultat généré sans eux.`); }
+    } catch (e) { recordsOk = false; console.error(`::warning::Enregistrements non lus dans Supabase (${e.message}) : résultat généré sans eux.`); }
   }
   run("Records.apply()");
   const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Europe/Brussels" }).slice(0, 10) + "T12:00:00Z").toISOString().slice(0, 10);
   const J = x => JSON.stringify(x);
-  return { ctx, run, J, stored, today, names: ids => run(`String(${J(ids || "")}).split(",").filter(Boolean).map(i => ((window.PEOPLE.find(p => p.id === i) || {}).name || i).replace(/ \\(.*\\)/, "")).join(", ")`) };
+  return { ctx, run, J, stored, recordsOk, today, names: ids => run(`String(${J(ids || "")}).split(",").filter(Boolean).map(i => ((window.PEOPLE.find(p => p.id === i) || {}).name || i).replace(/ \\(.*\\)/, "")).join(", ")`) };
 }

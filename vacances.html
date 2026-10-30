@@ -114,11 +114,11 @@ document.getElementById("list").addEventListener("submit", async e => {
   const rec = { id: c.dataset.id, kind: "holiday", key: c.dataset.key, year: c.dataset.year, name: c.dataset.name, status: v("status"), from: v("from"), to: v("to"), dest: v("dest"), budget: v("budget"), lana: v("lana"),
     lodging: f.has("lodging"), transport: f.has("transport"), docs: f.has("docs"), mail: f.has("mail"), note: v("note") };
   if (rec.status === "part" && rec.from && rec.to && rec.to < rec.from) { form.querySelector(".flash").textContent = "La date de fin précède le début."; return; }
-  await Records.put(rec);
+  let sent = await Records.put(rec);
   // « On part » avec dates et une personne pour Lana : la garde de Lana est notée (plus d'alerte)
   if (rec.status === "part" && rec.from && rec.to && rec.lana) await Records.put({ id: `l${rec.from}${rec.to}`, kind: "house", start: rec.from, end: rec.to, sitter: rec.lana, note: "Vacances : " + (rec.dest || rec.name) });
   render();
-  const again = document.querySelector(`.hol[data-id="${CSS.escape(c.dataset.id)}"] .flash`); if (again) again.textContent = "Enregistré ✓";
+  const again = document.querySelector(`.hol[data-id="${CSS.escape(c.dataset.id)}"] .flash`); if (again) again.textContent = sent ? "Enregistré ✓" : "Enregistré sur ce téléphone, pas encore envoyé aux autres appareils.";
 });
 document.getElementById("list").addEventListener("click", async e => {
   const b = e.target.closest("[data-clear]"); if (!b) return;
@@ -126,6 +126,7 @@ document.getElementById("list").addEventListener("click", async e => {
 });
 render();
 Records.refresh().then(changed => { if (changed) render(); });
+Records.watch(() => render());
 </script>
 </body>
 </html>

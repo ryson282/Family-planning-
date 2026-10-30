@@ -23,9 +23,11 @@ window.RECURRING_TASKS = [
   { month: 9, title: "Contrôler l'avertissement-extrait de rôle", who: "famille", cat: "Administratif", lead: 30, check: true },
   { month: 3, title: "Comparer les contrats d'énergie", who: "famille", cat: "Administratif", lead: 30, check: true },
   // École
-  { month: 12, title: "Décompte des frais scolaires (secondaire)", who: "famille", cat: "École", lead: 14 },
-  { month: 4, title: "Décompte des frais scolaires (secondaire)", who: "famille", cat: "École", lead: 14 },
-  { month: 10, title: "Facture des manuels scolaires (secondaire)", who: "famille", cat: "École", lead: 30, check: true },
+  { month: 12, title: "Décompte des frais scolaires (secondaire)", who: "famille", cat: "École", lead: 14, note: "Paiement échelonnable au-delà de 50 € ; communication structurée (vade-mecum)" },
+  { month: 4, title: "Décompte des frais scolaires (secondaire)", who: "famille", cat: "École", lead: 14, note: "Second décompte de l'année (vade-mecum)" },
+  { month: 10, title: "Facture des manuels scolaires (secondaire)", who: "famille", cat: "École", lead: 30, check: true, note: "100,48 € à 110,97 € selon les langues en 3e (vade-mecum) ; ne rien payer avant la facture" },
+  { month: 2, title: "Facture des photocopies (2e trimestre)", who: "famille", cat: "École", lead: 21, check: true, note: "58 € en 3e année (vade-mecum)" },
+  { month: 5, title: "Facture de la piscine (3e trimestre)", who: "lukas", cat: "École", lead: 21, check: true, note: "2,30 € la séance, selon les entrées effectives (vade-mecum)" },
   { month: 7, day: 15, title: "Préparer la rentrée (fournitures, abonnement de train de Louanne, garderie)", who: "famille", cat: "École", lead: 45 },
   { month: 2, title: "Inscriptions aux stages d'été (Alixia, Adrian, Lukas)", who: "famille", cat: "Activités", lead: 30 },
   // Santé

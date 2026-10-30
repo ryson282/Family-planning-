@@ -52,6 +52,9 @@ const seen = new Set();
   range("data/school-events.js", l, e.date, e.end);
   String(e.person || "").split(",").filter(Boolean).forEach(p => { if (!people.has(p)) err("data/school-events.js", `${l} : personne « ${p} » inconnue`); });
   if (!e.person) warn("data/school-events.js", `${l} : aucune personne`);
+  if (e.time !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(e.time)) err("data/school-events.js", `${l} : heure invalide « ${e.time} »`);
+  if (e.dueOffset !== undefined && !Number.isInteger(e.dueOffset)) err("data/school-events.js", `${l} : dueOffset doit être un entier`);
+  if (e.dueOffset !== undefined && !e.todo) warn("data/school-events.js", `${l} : dueOffset sans todo`);
   const k = `${e.date}|${e.title}|${e.person}`; if (seen.has(k)) warn("data/school-events.js", `${l} en double`); seen.add(k);
 });
 
@@ -112,6 +115,12 @@ if (!errors.length) {
     }
   } catch (e) { err("logique du site", `exception sur les données actuelles : ${e.stack.split("\n").slice(0, 3).join(" | ")}`); }
 }
+
+// Publication : toutes les pages à la racine doivent être copiées par le workflow de déploiement (sinon le lien du menu est mort en ligne)
+try {
+  const deploy = readFileSync(".github/workflows/deploy-cloudflare.yml", "utf8");
+  readdirSync(".").filter(f => f.endsWith(".html")).forEach(f => { if (!deploy.includes(f)) err(".github/workflows/deploy-cloudflare.yml", `la page ${f} n'est pas copiée dans le site publié`); });
+} catch (e) { /* workflow absent : rien à contrôler */ }
 
 // Péremption : prévenir bien avant la rentrée suivante
 const today = new Date().toISOString().slice(0, 10), plus = n => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);

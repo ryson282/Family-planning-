@@ -38,7 +38,24 @@
     <details>
       <summary><b>Sorties avec Émilie</b> <span class="muted" id="outCount"></span></summary>
       <p class="muted">Quand Adrian et Alixia sont chez l'autre parent (ou occupés par un stage ou une garde organisée), avec l'heure à partir de laquelle vous êtes libres le soir (activités d'Émilie, retour de Bruxelles, piscine et récupération de Louanne pris en compte).</p>
+      <p id="lastOut" class="wsum" style="margin:6px 0"></p>
+      <button type="button" id="outDone" class="mini" title="Noter une sortie à deux (aujourd'hui)">On est sortis aujourd'hui</button>
       <ul class="list" id="outList"></ul>
+    </details>
+  </section>
+  <section class="card">
+    <details id="dueBox">
+      <summary><b>Échéances du foyer</b> <span class="muted" id="dueCount"></span></summary>
+      <p class="muted">Dates propres à votre foyer (renouvellement de l'assurance auto, contrôle technique, carte d'identité, vaccin de Lana…) : elles apparaissent dans les suggestions et dans le flux de rappels avant l'échéance.</p>
+      <ul class="list" id="dueList"></ul>
+      <form class="add" id="dueForm">
+        <input id="dueTitle" placeholder="Ex. Assurance auto Dacia" aria-label="Intitulé de l'échéance" required>
+        <input id="dueDate" type="date" aria-label="Prochaine échéance" required>
+        <select id="dueEvery" aria-label="Fréquence"><option value="0">Une seule fois</option><option value="1" selected>Chaque année</option><option value="2">Tous les 2 ans</option><option value="5">Tous les 5 ans</option><option value="10">Tous les 10 ans</option></select>
+        <select id="dueLead" aria-label="Prévenir"><option value="30">Prévenir 30 j avant</option><option value="60" selected>Prévenir 60 j avant</option><option value="90">Prévenir 90 j avant</option></select>
+        <select id="dueWho" aria-label="Pour qui"></select>
+        <button class="primary">Ajouter</button>
+      </form>
     </details>
   </section>
   <section class="card">
@@ -54,6 +71,15 @@
     </details>
   </section>
 </main>
+<dialog id="dlg">
+  <form id="dlgForm" method="dialog">
+    <h3 id="dlgTitle" style="margin-top:0"></h3>
+    <label class="dlgrow"><span id="dlgWhoLabel">Solution</span><input id="dlgWho" required autocomplete="off"></label>
+    <label class="dlgrow" id="dlgStatusRow"><span>Statut</span><select id="dlgStatus"><option>confirmé</option><option>à confirmer</option></select></label>
+    <label class="dlgrow"><span>Note (facultatif)</span><input id="dlgNote" autocomplete="off"></label>
+    <div class="dlgbtns"><button type="button" id="dlgCancel">Annuler</button><button class="primary" id="dlgOk">Enregistrer</button></div>
+  </form>
+</dialog>
 <script src="data/school-holidays.js"></script>
 <script src="data/school-holidays-auto.js"></script>
 <script src="data/people.js"></script>
@@ -68,12 +94,13 @@
 <script src="assets/common.js"></script>
 <script src="data/sync-config.js"></script>
 <script src="assets/tasks-sync.js"></script>
+<script src="assets/records.js"></script>
 <script>
 nav("t");
 const KEY = "family-tasks-v1";
-let tasks = [];
-try { const v = JSON.parse(localStorage.getItem(KEY) || "[]"); if (Array.isArray(v)) tasks = v.filter(t => t && typeof t === "object"); } catch (e) {}
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch (e) {} };
+let tasks = Records.local(); // tâches ET enregistrements partagés (kind : exceptions de garde, solutions de garde, décisions de vacances, échéances du foyer)
+Records.apply(tasks);
+const save = () => { Records.saveLocal(tasks); Records.apply(tasks); };
 const people = [{ id: "famille", name: "Famille" }, ...(window.PEOPLE || [])];
 const opts = people.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
 document.getElementById("who").innerHTML = opts;
@@ -81,24 +108,14 @@ document.getElementById("filter").insertAdjacentHTML("beforeend", opts);
 const nameOf = id => (people.find(p => p.id === id) || {}).name || id;
 const nowMs = () => taskSync.now();
 const hash = s => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.codePointAt(0)) >>> 0; return h.toString(36); };
-const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 const hm = t => (t ? " à " + t.replace(":", " h ") : "");
-
-// Prochaine occurrence d'une tâche annuelle (modèle de data/recurring-tasks.js) encore à faire : { due, year } ou null.
-function nextOccurrence(r, today) {
-  const y0 = +today.slice(0, 4);
-  for (let y = y0; y <= y0 + 12; y++) {
-    if (r.every && (y - (r.from || 0)) % r.every !== 0) continue;
-    const start = iso(new Date(y, r.month - 1, r.day || 1)), end = r.day ? start : iso(new Date(y, r.month, 0));
-    if (end >= today) return { start, year: y, due: start < today ? today : start };
-  }
-  return null;
-}
 
 // Suggestions : planification autour des congés, tâches annuelles. Les suggestions de période portent `until` (fin de la période).
 function suggestions() {
   const today = iso(new Date());
   const out = [], yearly = [];
+  // Actions liées aux événements scolaires (data/school-events.js : todo, dueOffset, amount, time) : proposées 30 jours avant leur échéance, jamais écartées par le plafond.
+  schoolTodos(today).forEach(t => yearly.push(t));
   const push = (arr, s) => arr.push({ ...s, due: s.due < today ? today : s.due });
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances" && h.end >= today).forEach(h => {
     const weeks = h.name.includes("été") ? 10 : 4, label = h.name.replace(/ \(.*\)/, "");
@@ -106,25 +123,21 @@ function suggestions() {
   });
   childcareGaps().filter(g => g.end >= today).forEach(g => {
     const label = g.start === g.end ? fmt(parse(g.start)) : `du ${fmt(parse(g.start))} au ${fmt(parse(g.end))}`;
-    push(out, { title: `Planification de garde A² (Adrian et Alixia) ${label} (${g.holiday.replace(/ \(.*\)/, "")})`, cat: "Garde", who: "moi", due: addDays(g.start, g.holiday.includes("été") ? -56 : -28), until: g.end });
+    push(out, { title: `Planification de garde A² (Adrian et Alixia) ${label} (${g.holiday.replace(/ \(.*\)/, "")})`, cat: "Garde", who: "moi", due: addDays(g.start, g.holiday.includes("été") ? -56 : -28), until: g.end, plan: { type: "childcare", start: g.start, end: g.end, label: g.holiday.replace(/ \(.*\)/, "") } });
   });
   // A² chez l'autre parent pendant un congé : partir en vacances avec Louanne, Lukas et Émilie, et prévoir Lana.
   awayPeriods().filter(a => a.end >= today).forEach(a => {
+    const dec = (window.HOLIDAY_DECISIONS || {})[`${congeKey(a.holiday)}:${a.hstart.slice(0, 4)}`], decided = dec && dec.status !== "decide"; // décidé dans la page Vacances (on part / on reste)
     const summer = a.holiday.includes("été"), label = `du ${fmt(parse(a.start))} au ${fmt(parse(a.end))} (${a.holiday.replace(/ \(.*\)/, "")})`;
-    push(out, { title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie${a.louanne ? " — " + a.louanne : ""}`, cat: "Vacances", who: "famille", due: addDays(a.start, -(summer ? 16 : 8) * 7), until: a.end });
-    if (!(window.HOUSE_EMPTY || []).some(h => h.start <= a.end && h.end >= a.start))
-      push(out, { title: `Garde de Lana si départ en vacances ${label}`, cat: "Garde", who: "lana", due: addDays(a.start, -(summer ? 8 : 4) * 7), until: a.end });
+    if (!decided) push(out, { title: `Planification de vacances ${label} avec Louanne, Lukas et Émilie${a.louanne ? " — " + a.louanne : ""}`, cat: "Vacances", who: "famille", due: addDays(a.start, -(summer ? 16 : 8) * 7), until: a.end });
+    if (!(dec && dec.status === "reste") && !(window.HOUSE_EMPTY || []).some(h => h.start <= a.end && h.end >= a.start))
+      push(out, { title: `Garde de Lana si départ en vacances ${label}`, cat: "Garde", who: "lana", due: addDays(a.start, -(summer ? 8 : 4) * 7), until: a.end, plan: { type: "house", start: a.start, end: a.end, label: a.holiday.replace(/ \(.*\)/, "") } });
   });
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today).forEach(a =>
-    push(out, { title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: addDays(a.start, -14), until: a.end }));
-  // Tâches annuelles : visibles `lead` jours avant leur échéance (60 par défaut), jamais écartées par le plafond des autres suggestions.
-  (window.RECURRING_TASKS || []).forEach(r => {
-    const o = nextOccurrence(r, today);
-    if (!o || o.start > addDays(today, r.lead || 60)) return;
-    const when = r.day ? `${r.day} ${MONTHS[r.month - 1]}` : MONTHS[r.month - 1];
-    yearly.push({ title: `${r.title}${r.check ? " (à vérifier)" : ""} (${when} ${o.year})`, cat: r.cat, who: r.who, due: o.due, until: addDays(o.due, 60), recurring: true });
-  });
-  const known = new Set(tasks.map(t => t.title));
+    push(out, { title: `Trouver qui garde Lana du ${fmt(parse(a.start))} au ${fmt(parse(a.end))}`, cat: "Garde", who: "lana", due: addDays(a.start, -14), until: a.end, plan: { type: "house", start: a.start, end: a.end, label: a.note || "" } }));
+  // Tâches annuelles et échéances du foyer : visibles `lead` jours avant leur échéance (60 par défaut), jamais écartées par le plafond des autres suggestions.
+  annualTasks(today).forEach(t => yearly.push(t));
+  const known = new Set(tasks.filter(t => !t.kind).map(t => t.title));
   const keep = s => !known.has(s.title);
   const byDue = (a, b) => a.due.localeCompare(b.due);
   return [...yearly.filter(keep).sort(byDue), ...out.filter(keep).sort(byDue).slice(0, 16)].sort(byDue);
@@ -149,8 +162,8 @@ function outings() {
 }
 
 function add(t) {
-  const n = { id: t.key ? "s" + hash(t.key) : "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), done: false, ...t, updated: nowMs() };
-  delete n.key; delete n.recurring;
+  const { key, recurring, start, lead, deadline, record, plan, ...rest } = t;
+  const n = { id: key ? "s" + hash(key) : "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), done: false, ...rest, updated: nowMs() };
   tasks = tasks.filter(x => String(x.id) !== String(n.id)); tasks.push(n); save(); render(); remotePush(n);
 }
 
@@ -194,26 +207,28 @@ const byDue = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.t
 function render() {
   purgePast();
   const f = document.getElementById("filter").value, sd = document.getElementById("showDone").checked, today = iso(new Date());
-  const mine = tasks.filter(t => !t.dismissed && (!f || t.who === f));
+  const mine = tasks.filter(t => !t.kind && !t.dismissed && (!f || t.who === f));
   const rows = [...mine.filter(t => !t.done).sort(byDue), ...(sd ? mine.filter(t => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)) : [])];
   const late = mine.filter(t => !t.done && t.due && t.due < today).length;
   document.getElementById("lateCount").textContent = late ? `⚠ ${late} en retard` : "";
   const empty = mine.length ? "Tout est fait ✓" : "Aucune tâche.";
   document.getElementById("list").innerHTML = rows.length ? rows.map(t => `
     <li class="item task ${t.done ? "done" : ""}"><input type="checkbox" data-id="${esc(t.id)}" ${t.done ? "checked" : ""} aria-label="Terminée">
-    <span class="t">${esc(t.title)}</span><span class="meta"><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
+    <span class="t">${esc(t.title)}${t.note ? `<small class="note">${esc(t.note)}</small>` : ""}</span><span class="meta"><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
     <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? esc(fmt(parse(t.due)) + hm(t.time)) : ""}</span>${t.due && !t.done ? `<button class="mini" data-snooze="${esc(t.id)}" title="Reporter d'une semaine">+1 sem.</button>` : ""}</span>
     <button data-del="${esc(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button></li>`).join("") : `<li class="muted">${empty}</li>`;
   const s = suggestions();
   document.getElementById("sugg").hidden = !s.length;
   document.getElementById("suggCount").textContent = s.length ? `(${s.length})` : "";
-  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${esc(fmt(parse(x.due)))}</span></span><span class="acts"><button data-s="${i}">Ajouter</button><button class="mini" data-x="${i}" title="Écarter : ne pas le faire ou déjà réglé">Écarter</button></span></li>`).join("");
+  document.getElementById("suggList").innerHTML = s.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.title)}${x.note ? `<small class="note">${esc(x.note)}</small>` : ""}</span><span class="meta">${catTag(x.cat)}<span class="muted">avant le ${esc(fmt(parse(x.due)))}</span></span><span class="acts"><button data-s="${i}">Ajouter</button>${x.plan ? `<button data-p="${i}" title="Noter la solution trouvée">Organisé</button>` : ""}<button class="mini" data-x="${i}" title="Écarter : ne pas le faire ou déjà réglé">Écarter</button></span></li>`).join("");
   window._s = s;
   const o = outings();
   document.getElementById("out").hidden = !o.length;
   document.getElementById("outCount").textContent = o.length ? `(${o.length})` : "";
   document.getElementById("outList").innerHTML = o.map((x, i) => `<li class="item sugg"><span class="t">${esc(x.text)}</span><span class="meta">${catTag("Sorties")}</span><button data-o="${i}">Ajouter</button></li>`).join("");
   window._o = o;
+  renderLastOuting();
+  renderDeadlines();
 }
 
 document.getElementById("f").onsubmit = e => {
@@ -230,12 +245,66 @@ document.addEventListener("click", e => {
   if (d.snooze) { const t = tasks.find(t => String(t.id) === d.snooze); if (t) { t.due = addDays(t.due > iso(new Date()) ? t.due : iso(new Date()), 7); t.updated = nowMs(); save(); render(); remotePush(t); } }
   if (d.s) { const x = window._s[d.s]; if (x) add({ ...x, key: x.title }); }
   if (d.x) { const x = window._s[d.x]; if (x) add({ ...x, key: x.title, dismissed: true, done: true }); }
+  if (d.p) { const x = window._s[d.p]; if (x && x.plan) openPlan(x); }
+  if (d.dd) { Records.remove(d.dd).then(() => { tasks = Records.local(); render(); }); }
   if (d.o) { const o = window._o[d.o]; if (o) add({ title: o.title, who: "moi", cat: "Sorties", due: o.due, until: o.until, key: o.title }); }
 });
 document.addEventListener("change", e => {
   if (e.target.dataset.id) { const t = tasks.find(t => String(t.id) === e.target.dataset.id); if (!t) return; t.done = e.target.checked; t.doneAt = t.done ? nowMs() : undefined; t.updated = nowMs(); save(); render(); remotePush(t); }
   else if (e.target.id === "filter" || e.target.id === "showDone") render();
 });
+// Solutions de garde (A² en congé, Lana) : enregistrées comme enregistrements partagés ; la suggestion disparaît.
+let planCtx = null;
+const dlg = document.getElementById("dlg");
+function openPlan(x) {
+  planCtx = x.plan; const isHouse = x.plan.type === "house";
+  document.getElementById("dlgTitle").textContent = (isHouse ? "Qui garde Lana ? " : "Garde de A² ") + `du ${fmt(parse(x.plan.start))} au ${fmt(parse(x.plan.end))}`;
+  document.getElementById("dlgWhoLabel").textContent = isHouse ? "Qui s'en occupe" : "Solution (stage, grands-parents…)";
+  document.getElementById("dlgStatusRow").hidden = isHouse;
+  ["dlgWho", "dlgNote"].forEach(i => { document.getElementById(i).value = ""; });
+  dlg.showModal();
+}
+document.getElementById("dlgCancel").onclick = () => dlg.close();
+document.getElementById("dlgForm").onsubmit = async e => {
+  e.preventDefault();
+  const who = document.getElementById("dlgWho").value.trim(), note = document.getElementById("dlgNote").value.trim(), p = planCtx;
+  if (!who || !p) return;
+  dlg.close();
+  await Records.put(p.type === "house" ? { id: `l${p.start}${p.end}`, kind: "house", start: p.start, end: p.end, sitter: who, note }
+    : { id: `c${p.start}${p.end}`, kind: "childcare", start: p.start, end: p.end, solution: who, status: document.getElementById("dlgStatus").value, note });
+  tasks = Records.local(); render();
+};
+
+// Mémoire des sorties à deux : dernière sortie notée (enregistrement « outing » ou tâche « Sortie… » terminée), objectif d'une sortie toutes les 3 semaines.
+const OUTING_GOAL_DAYS = 21;
+function lastOuting() {
+  const days = [...Records.of("outing", tasks).map(r => r.date), ...tasks.filter(t => !t.kind && t.cat === "Sorties" && t.done && t.doneAt).map(t => iso(new Date(t.doneAt)))].filter(Boolean).sort();
+  return days.length ? days[days.length - 1] : null;
+}
+function renderLastOuting() {
+  const el = document.getElementById("lastOut"), last = lastOuting(), today = iso(new Date());
+  if (!last) { el.className = "wsum"; el.textContent = "Aucune sortie à deux notée pour l'instant."; return; }
+  const days = Math.round((parse(today) - parse(last)) / MS), weeks = Math.floor(days / 7);
+  el.textContent = days === 0 ? "Dernière sortie : aujourd'hui ✓" : `Dernière sortie : il y a ${days < 14 ? days + " jours" : weeks + " semaines"}${days > OUTING_GOAL_DAYS ? " — objectif : une sortie toutes les 3 semaines" : ""}`;
+  el.className = "wsum " + (days > OUTING_GOAL_DAYS ? "bad" : "ok");
+}
+document.getElementById("outDone").onclick = async () => { await Records.put({ id: Records.newId("g"), kind: "outing", date: iso(new Date()) }); tasks = Records.local(); render(); };
+
+// Échéances du foyer (enregistrements « deadline »)
+const EVERY = { 0: "une seule fois", 1: "chaque année", 2: "tous les 2 ans", 5: "tous les 5 ans", 10: "tous les 10 ans" };
+document.getElementById("dueWho").innerHTML = opts;
+function renderDeadlines() {
+  const l = Records.of("deadline", tasks).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  document.getElementById("dueCount").textContent = l.length ? `(${l.length})` : "";
+  document.getElementById("dueList").innerHTML = l.map(d => `<li class="item"><span class="t">${esc(d.title)}<small class="note">${esc(fmt(parse(d.date)))} ${esc(d.date.slice(0, 4))} · ${esc(EVERY[d.every] || "chaque année")} · prévenu ${esc(d.lead || 60)} j avant · ${esc(nameOf(d.who))}</small></span><button data-dd="${esc(d.id)}" title="Supprimer" aria-label="Supprimer">✕</button></li>`).join("") || `<li class="muted">Aucune échéance saisie.</li>`;
+}
+document.getElementById("dueForm").onsubmit = async e => {
+  e.preventDefault();
+  const title = document.getElementById("dueTitle").value.trim(), date = document.getElementById("dueDate").value;
+  if (!title || !date) return;
+  await Records.put({ id: Records.newId("d"), kind: "deadline", title, date, every: +document.getElementById("dueEvery").value, lead: +document.getElementById("dueLead").value, who: document.getElementById("dueWho").value, cat: "Administratif" });
+  tasks = Records.local(); e.target.reset(); render();
+};
 document.getElementById("syncForm").onsubmit = e => { e.preventDefault(); taskSync.setConfig(syncUrl.value, syncKey.value); syncKey.value = ""; runSync(); };
 document.getElementById("syncOff").onclick = () => { taskSync.disable(); syncUrl.value = ""; setState("(désactivée)"); };
 const cfg = taskSync.config(); if (cfg) syncUrl.value = cfg.url;

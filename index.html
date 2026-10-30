@@ -12,6 +12,12 @@
 <body>
 <header><h1>Planning familial</h1></header>
 <main>
+  <section class="card home" id="home" aria-label="Aujourd'hui, demain et à anticiper">
+    <div id="homeAlerts" role="status"></div>
+    <div id="homeToday"></div>
+    <div id="homeTomorrow"></div>
+    <details open class="ahead"><summary><b>À anticiper</b></summary><ul class="list" id="homeAhead"></ul></details>
+  </section>
   <section class="card">
     <div class="bar top">
       <div class="seg" role="group" aria-label="Vue"><button id="vMonth" aria-pressed="true">Mois</button><button id="vWeek" aria-pressed="false">Semaine</button></div>
@@ -24,7 +30,7 @@
       </div>
       <p class="muted sync" id="upd"></p>
       <div class="grid" id="grid"></div>
-      <div class="detail" id="detail" aria-live="polite"><h3 id="dTitle"></h3><ul class="list" id="dList"></ul><button type="button" id="toWeek" class="linkbtn">Voir la semaine de ce jour →</button></div>
+      <div class="detail" id="detail" aria-live="polite"><h3 id="dTitle"></h3><ul class="list" id="dList"></ul><div id="dActions"></div><button type="button" id="toWeek" class="linkbtn">Voir la semaine de ce jour →</button></div>
       <details class="legend-box">
         <summary>Légende</summary>
         <div class="legend">
@@ -64,17 +70,26 @@
 <script src="assets/common.js"></script>
 <script src="assets/schedule.js"></script>
 <script src="assets/week.js"></script>
+<script src="data/recurring-tasks.js"></script>
+<script src="data/sync-config.js"></script>
+<script src="assets/tasks-sync.js"></script>
+<script src="assets/records.js"></script>
 <script>
 nav("p");
 let cur = new Date(); cur.setDate(1);
-const events = allEvents();
-const careByDay = Object.fromEntries(childcareDays().map(d => [d.date, d]));
-const offByDay = Object.fromEntries(daysOff().map(o => [o.date, o.name])); // jours sans école (fériés et congés isolés)
+Records.apply(); // exceptions de garde, solutions de garde, décisions de vacances enregistrées dans l'application
+let events, careByDay, offByDay;
+function recompute() {
+  events = allEvents();
+  careByDay = Object.fromEntries(childcareDays().map(d => [d.date, d]));
+  offByDay = Object.fromEntries(daysOff().map(o => [o.date, o.name])); // jours sans école (fériés et congés isolés)
+}
+recompute();
 const whoSel = document.getElementById("who");
 const todayIso = () => iso(new Date());
 let selDay = todayIso();
 whoSel.insertAdjacentHTML("beforeend", PEOPLE.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join(""));
-whoSel.onchange = () => { render(); upcoming(); if (!document.getElementById("weekView").hidden) renderWeek(); };
+whoSel.onchange = () => { render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek(); };
 document.getElementById("people").innerHTML = PEOPLE.map(p => `<span><i style="background:${p.color}"></i>${esc(p.name.replace(/ \(.*\)/, ""))}</span>`).join("");
 const visible = e => !whoSel.value || !e.person || e.person.split(",").includes(whoSel.value);
 const personName = id => String(id || "").split(",").map(i => ((PEOPLE.find(p => p.id === i) || {}).name || i).replace(/ \(.*\)/, "")).join(", ");
@@ -87,12 +102,35 @@ function dayDetail(k) {
   const conges = congesOn(k).filter(g => !whoSel.value || g.persons.includes(whoSel.value));
   if (conges.length) rows.push(`<li><span class="t">${conges.map(g => `${esc(g.name)} <span class="muted">· ${esc(personName(g.persons.join(",")))}</span>`).join("<br>")}</span>${catTag("Congé")}</li>`);
   if (h && h.type === "rentree") rows.push(`<li><span class="t">${esc(h.name)} <span class="muted">· ${esc(personName(KIDS.join(",")))}</span></span>${catTag("École")}</li>`);
-  if (c) rows.push(`<li><span class="t">${c === "moi" ? "Enfants chez moi" : c === "autre" ? "Enfants chez l'autre parent" : "Jour d'échange"}${custodyEstimated(k) ? " <span class=\"muted\">(estimé par règle)</span>" : ""}</span>${catTag("Garde")}</li>`);
+  if (c) rows.push(`<li><span class="t">${c === "moi" ? "Enfants chez moi" : c === "autre" ? "Enfants chez l'autre parent" : "Jour d'échange"}${(window.CUSTODY_OVERRIDES || {})[k] ? " <span class=\"muted\">(modifié à la main)</span>" : custodyEstimated(k) ? " <span class=\"muted\">(estimé par règle)</span>" : ""}</span>${catTag("Garde")}</li>`);
   if (cc) rows.push(`<li><span class="t">🧒 Garde de A² en congé : ${esc(cc.solution || "à organiser")}</span>${catTag("Garde")}</li>`);
   if (he) rows.push(`<li><span class="t">🐱 Maison vide : Lana ${he.sitter ? "gardée par " + esc(he.sitter) : "sans solution de garde"}</span>${catTag("Maison")}</li>`);
   events.filter(e => visible(e) && inRange(k, e.date, e.end) && !CONGE_EVENT.test(e.title)).forEach(e =>
     rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : e.source ? ` <span class="muted">· ${esc(calendarLabel(e.source))}</span>` : ""}</span></li>`));
   return rows.length ? rows.join("") : `<li class="muted">Rien de particulier ce jour-là.</li>`;
+}
+
+// Modifier la garde d'un jour (échange exceptionnel, changement de dernière minute) ou signaler un enfant malade : enregistré dans l'application, partagé entre appareils.
+function dayActions(k) {
+  const cur = (window.CUSTODY_OVERRIDES || {})[k], kids = ["alixia", "adrian", "lukas"].map(i => `<option value="${i}">${esc(personName(i))}</option>`).join("");
+  return `<details class="dact"><summary>Modifier la garde ce jour…</summary>
+    <div class="dacts"><button data-ov="moi">Enfants chez moi</button><button data-ov="autre">Chez l'autre parent</button><button data-ov="echange">Jour d'échange</button>${cur ? `<button data-ov="">Rétablir le rythme habituel</button>` : ""}</div>
+    <label class="dlgrow">Jusqu'au (facultatif : plusieurs jours)<input type="date" id="ovTo" min="${k}"></label>
+    <div class="dacts"><select id="sickWho" aria-label="Enfant">${kids}</select><button data-sick="1">Enfant malade ou école fermée : créer la tâche</button></div>
+    <p class="muted" id="dFlash" aria-live="polite"></p></details>`;
+}
+async function applyOverride(v) {
+  const k = selDay, picked = (document.getElementById("ovTo") || {}).value, days = [];
+  if (!v && !picked) { for (let d = k; (window.CUSTODY_OVERRIDES || {})[d] && days.length < 31; d = addDays(d, 1)) days.push(d); } // rétablir : toute la suite d'exceptions consécutives
+  else for (let d = k; d <= (!picked || picked < k ? k : picked) && days.length < 31; d = addDays(d, 1)) days.push(d);
+  for (const d of days) { if (v) await Records.put({ id: "o" + d, kind: "override", date: d, who: v }); else await Records.remove("o" + d); }
+  recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek();
+}
+async function sickTask() {
+  const who = document.getElementById("sickWho").value;
+  await Records.put({ id: Records.newId("t"), title: `Enfant malade ou école fermée : ${personName(who)} — qui reste à la maison ?`, who: "moi", cat: "Garde", due: selDay, done: false });
+  document.getElementById("dFlash").textContent = "Tâche créée dans « Tâches » pour ce jour.";
+  renderHome();
 }
 
 function render() {
@@ -118,6 +156,7 @@ function render() {
   }
   document.getElementById("dTitle").textContent = longDay(selDay);
   document.getElementById("dList").innerHTML = dayDetail(selDay);
+  document.getElementById("dActions").innerHTML = dayActions(selDay);
   document.getElementById("upd").textContent = window.CALENDAR_UPDATED ? "Agendas synchronisés le " + new Date(window.CALENDAR_UPDATED).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" }) : "Agendas Google non synchronisés";
 }
 
@@ -140,6 +179,38 @@ function upcoming() {
   document.getElementById("upcoming").innerHTML = rows.length
     ? rows.map(r => `<li class="item up"><span class="muted when">${when(r.start)}</span><span class="t">${esc(r.text)}</span><span class="meta">${catTag(r.tag)}</span></li>`).join("")
     : `<li class="muted">Rien de prévu.</li>`;
+}
+
+// Écran d'accueil : alertes, aujourd'hui, demain, à anticiper (14 prochains jours).
+function renderHome() {
+  const today = todayIso(), tomorrow = addDays(today, 1), who = whoSel.value;
+  const dayOf = k => WeekView.model(WeekView.mondayOf(k), events, careByDay).days.find(d => d.k === k);
+  const long = k => parse(k).toLocaleDateString("fr-BE", { weekday: "long", day: "numeric", month: "long" });
+  const tasks = Records.local().filter(t => !t.kind && !t.dismissed && !t.done), range = (a, b) => (a === b ? fmt(parse(a)) : `du ${fmt(parse(a))} au ${fmt(parse(b))}`);
+  const late = tasks.filter(t => t.due && t.due < today), soon = tasks.filter(t => t.due && t.due >= today && t.due <= addDays(today, 3));
+  const list = a => a.slice(0, 3).map(t => esc(t.title)).join(" · ") + (a.length > 3 ? " …" : "");
+  const alerts = [];
+  if (late.length) alerts.push(["bad", `<a href="taches.html">⚠ ${late.length} tâche${late.length > 1 ? "s" : ""} en retard</a> : ${list(late)}`]);
+  if (soon.length) alerts.push(["warn", `<a href="taches.html">${soon.length} tâche${soon.length > 1 ? "s" : ""} à faire d'ici 3 jours</a> : ${list(soon)}`]);
+  childcareGaps().filter(g => g.end >= today && g.start <= addDays(today, 14)).forEach(g => alerts.push(["bad", `<a href="taches.html">Garde de A² à organiser</a> ${range(g.start, g.end)} (${esc(g.holiday.replace(/ \(.*\)/, ""))})`]));
+  (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today && a.start <= addDays(today, 30)).forEach(a => alerts.push(["bad", `<a href="taches.html">Qui garde Lana ?</a> ${range(a.start, a.end)}`]));
+  (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances" && h.end >= today && h.start <= addDays(today, 42)).forEach(h => {
+    let est = false; for (let k = h.start > today ? h.start : today; k <= h.end; k = addDays(k, 1)) if (custodyEstimated(k)) est = true;
+    if (est) alerts.push(["warn", `Garde estimée par règle pendant ${esc(h.name.replace(/ \(.*\)/, ""))} (${range(h.start, h.end)}) : à confirmer avec l'autre parent`]);
+  });
+  document.getElementById("homeAlerts").innerHTML = alerts.map(([l, h]) => `<p class="alert ${l}">${h}</p>`).join("");
+  const opts = { who, compact: true };
+  document.getElementById("homeToday").innerHTML = WeekView.card(dayOf(today), { ...opts, title: `Aujourd'hui · ${long(today)}` });
+  document.getElementById("homeTomorrow").innerHTML = WeekView.card(dayOf(tomorrow), { ...opts, title: `Demain · ${long(tomorrow)}` });
+  // À anticiper : tâches proches, rappels annuels, événements d'école avec une action à faire, congés qui approchent
+  const lim = addDays(today, 14), known = new Set(Records.local().filter(t => !t.kind).map(t => t.title)), rows = [];
+  tasks.filter(t => t.due && t.due > today && t.due <= lim && (!who || t.who === who)).forEach(t => rows.push({ d: t.due, text: t.title, tag: t.cat }));
+  annualTasks(today).filter(t => t.due <= addDays(today, 21) && !known.has(t.title) && (!who || t.who === who)).forEach(t => rows.push({ d: t.due, text: "Rappel : " + t.title, tag: t.cat }));
+  events.filter(e => visible(e) && e.end >= today && e.date <= lim && !CONGE_EVENT.test(e.title) && (e.todo || e.needsParent || /réunion|bulletin|examen|délibération|voyage|CEB|classes de neige/i.test(e.title)))
+    .forEach(e => rows.push({ d: e.date < today ? today : e.date, text: e.title + (e.todo ? " — " + e.todo : "") + (e.person ? " · " + personName(e.person) : ""), tag: "École" }));
+  congesUpcoming(today, addDays(today, 30)).filter(c => c.start > today).forEach(c => rows.push({ d: c.start, text: "Congé : " + c.name + " · " + personName(c.groups.flatMap(g => g.persons).join(",")), tag: "Congé" }));
+  rows.sort((a, b) => a.d.localeCompare(b.d));
+  document.getElementById("homeAhead").innerHTML = rows.slice(0, 8).map(r => `<li class="item up"><span class="muted when">${r.d === today ? "aujourd'hui" : fmt(parse(r.d))}</span><span class="t">${esc(r.text)}</span><span class="meta">${catTag(r.tag)}</span></li>`).join("") || `<li class="muted">Rien d'urgent dans les 14 prochains jours.</li>`;
 }
 
 function goMonth(n) {
@@ -176,10 +247,16 @@ document.getElementById("toWeek").onclick = () => { weekStart = WeekView.mondayO
 document.getElementById("prev").onclick = () => goMonth(-1);
 document.getElementById("next").onclick = () => goMonth(1);
 document.getElementById("today").onclick = () => { cur = new Date(); cur.setDate(1); selDay = todayIso(); render(); };
+document.getElementById("detail").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.ov !== undefined) applyOverride(b.dataset.ov);
+  if (b.dataset.sick) sickTask();
+});
 const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.dataset.d; render(); const f = document.querySelector(".day.sel"); if (f) f.focus({ preventScroll: true }); } };
 document.getElementById("grid").addEventListener("click", pick);
 document.getElementById("grid").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
-render(); upcoming();
+render(); upcoming(); renderHome();
+Records.refresh().then(changed => { if (changed) { recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek(); } });
 try { if (sessionStorage.getItem("planning-view") === "week") setView("week"); } catch (e) {}
 </script>
 </body>

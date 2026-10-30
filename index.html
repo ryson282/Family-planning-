@@ -111,26 +111,36 @@ function dayDetail(k) {
   return rows.length ? rows.join("") : `<li class="muted">Rien de particulier ce jour-là.</li>`;
 }
 
-// Modifier la garde d'un jour (échange exceptionnel, changement de dernière minute) ou signaler un enfant malade : enregistré dans l'application, partagé entre appareils.
 // Événements saisis dans le site (rendez-vous, sorties, déplacements) : enregistrés comme les tâches, partagés entre appareils.
-let editing = null; // enregistrement en cours de modification, {} pour un nouvel événement
+let editing = null, notice = ""; // editing : enregistrement en cours de modification ({} = nouvel événement) ; notice : avertissements après un enregistrement
 function eventForm(k) {
-  const r = editing || {}, picked = String(r.person || "").split(",").filter(Boolean);
-  const boxes = PEOPLE.map(p => `<label class="check"><input type="checkbox" name="person" value="${esc(p.id)}"${picked.includes(p.id) ? " checked" : ""}> ${esc(p.name.replace(/ \(.*\)/, ""))}</label>`).join("");
+  const r = editing || {}, picked = String(r.person || "").split(",").filter(Boolean), more = r.house || r.noschool || r.remind;
+  const boxes = PEOPLE.filter(p => !p.pet).map(p => `<label class="check"><input type="checkbox" name="person" value="${esc(p.id)}"${picked.includes(p.id) ? " checked" : ""}> ${esc(p.name.replace(/ \(.*\)/, ""))}</label>`).join("");
+  const presets = ["Médecin", "Dentiste", "Sortie", "Voyage"].map(t => `<button type="button" class="mini" data-preset="${t}">${t}</button>`).join("");
+  const remind = [["", "À l'heure habituelle (1 h avant, ou la veille à 18 h)"], ["1", "La veille"], ["2", "2 jours avant"], ["7", "1 semaine avant"]].map(([v, l]) => `<option value="${v}"${String(r.remind || "") === v ? " selected" : ""}>${l}</option>`).join("");
   return `<details class="dact" id="evBox"${editing ? " open" : ""}><summary>${r.id ? "Modifier l'événement" : "＋ Ajouter un événement ce jour"}</summary>
     <form id="evForm" class="holform" autocomplete="off">
-      <label class="dlgrow">Titre<input name="title" required maxlength="120" value="${esc(r.title || "")}" placeholder="Ex. Dentiste, Spectacle, Voyage"></label>
+      ${r.id ? "" : `<div class="dacts" aria-label="Modèles">${presets}</div>`}
+      <label class="dlgrow">Titre<input name="title" required maxlength="120" value="${esc(r.title || "")}" placeholder="Ex. Dentiste, Spectacle, Voyage" enterkeyhint="next"></label>
       <div class="two"><label class="dlgrow">Date<input type="date" name="date" required value="${esc(r.date || k)}"></label><label class="dlgrow">Jusqu'au (facultatif)<input type="date" name="end" value="${esc(r.end && r.end !== r.date ? r.end : "")}"></label></div>
       <div class="two"><label class="dlgrow">Heure (facultatif)<input type="time" name="time" value="${esc(r.time || "")}"></label><label class="dlgrow">Fin (facultatif)<input type="time" name="timeEnd" value="${esc(r.timeEnd || "")}"></label></div>
       <fieldset class="checks"><legend class="muted">Qui est concerné ? (personne cochée = toute la famille)</legend>${boxes}</fieldset>
-      <label class="dlgrow">Note<input name="note" maxlength="200" value="${esc(r.note || "")}"></label>
-      <div class="dacts"><button class="primary">Enregistrer</button>${editing ? `<button type="button" data-evcancel="1">Annuler</button>` : ""}</div>
+      <label class="dlgrow">Note<input name="note" maxlength="200" value="${esc(r.note || "")}" enterkeyhint="done"></label>
+      <details class="dact" id="evMore"${more ? " open" : ""}><summary>Plus d'options (voyage, jour sans école, rappel, répétition)</summary>
+        <label class="check"><input type="checkbox" name="house"${r.house ? " checked" : ""}> La maison sera vide (Lana seule)</label>
+        <label class="dlgrow">Qui garde Lana (si la maison est vide)<input name="sitter" value="${esc(r.sitter || "")}" maxlength="60"></label>
+        <label class="check"><input type="checkbox" name="noschool"${r.noschool ? " checked" : ""}> Jour sans école (journée pédagogique, grève…) pour les personnes cochées</label>
+        <label class="dlgrow">Me prévenir<select name="remind">${remind}</select></label>
+        <label class="check"><input type="checkbox" name="prep"> Créer une tâche de préparation (la veille)</label>
+        ${r.id ? "" : `<div class="two"><label class="dlgrow">Répéter<select name="repeat"><option value="">Une seule fois</option><option value="7">Chaque semaine</option><option value="14">Toutes les 2 semaines</option><option value="m">Chaque mois</option></select></label><label class="dlgrow">Jusqu'au<input type="date" name="until"></label></div>`}
+      </details>
+      <div class="dacts sticky"><button class="primary">Enregistrer</button>${editing ? `<button type="button" data-evcancel="1">Annuler</button>` : ""}</div>
       <p class="muted" id="evFlash" aria-live="polite"></p>
     </form></details>`;
 }
 function dayActions(k) {
   const cur = (window.CUSTODY_OVERRIDES || {})[k], kids = ["alixia", "adrian", "lukas"].map(i => `<option value="${i}">${esc(personName(i))}</option>`).join("");
-  return eventForm(k) + `<details class="dact"><summary>Modifier la garde ce jour…</summary>
+  return (notice ? `<div id="evNotice">${notice}</div>` : "") + eventForm(k) + `<details class="dact"><summary>Modifier la garde ce jour…</summary>
     <div class="dacts"><button data-ov="moi">Enfants chez moi</button><button data-ov="autre">Chez l'autre parent</button><button data-ov="echange">Jour d'échange</button>${cur ? `<button data-ov="">Rétablir le rythme habituel</button>` : ""}</div>
     <label class="dlgrow">Jusqu'au (facultatif : plusieurs jours)<input type="date" id="ovTo" min="${k}"></label>
     <div class="dacts"><select id="sickWho" aria-label="Enfant">${kids}</select><button data-sick="1">Enfant malade ou école fermée : créer la tâche</button></div>
@@ -271,32 +281,75 @@ document.getElementById("detail").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.ov !== undefined) applyOverride(b.dataset.ov);
   if (b.dataset.sick) sickTask();
-  if (b.dataset.evedit) { editing = Records.of("event").find(r => String(r.id) === b.dataset.evedit) || null; render(); const f = document.getElementById("evBox"); if (f) f.scrollIntoView({ block: "center" }); }
+  if (b.dataset.preset) {
+    const t = document.querySelector("#evForm [name=title]"); if (!t.value.trim()) t.value = b.dataset.preset + (b.dataset.preset === "Voyage" ? "" : " : "); t.focus();
+    if (b.dataset.preset === "Voyage") { document.getElementById("evMore").open = true; document.querySelector("#evForm [name=house]").checked = true; }
+  }
+  if (b.dataset.evedit) { editing = Records.of("event").find(r => String(r.id) === b.dataset.evedit) || null; notice = ""; render(); const f = document.getElementById("evBox"); if (f) f.scrollIntoView({ block: "center" }); }
   if (b.dataset.evcancel) { editing = null; render(); }
-  if (b.dataset.evdel) { const r = Records.of("event").find(x => String(x.id) === b.dataset.evdel); if (r && confirm(`Supprimer « ${r.title} » ?`)) refreshAll(Records.remove(r.id)); }
+  if (b.dataset.evdel) deleteEvent(b.dataset.evdel);
 });
-document.getElementById("detail").addEventListener("submit", e => {
+// Supprime un événement (et sa série, si l'utilisateur le demande) avec ses tâches de préparation.
+async function deleteEvent(id) {
+  const r = Records.of("event").find(x => String(x.id) === id); if (!r) return;
+  let ids = [r.id];
+  if (r.series) {
+    const later = Records.of("event").filter(x => x.series === r.series && x.date >= r.date);
+    if (later.length > 1 && confirm(`« ${r.title} » se répète : supprimer cette occurrence et les ${later.length - 1} suivantes ?\nOK = toute la suite · Annuler = choisir`)) ids = later.map(x => x.id);
+    else if (!confirm(`Supprimer seulement « ${r.title} » du ${fmt(parse(r.date))} ?`)) return;
+  } else if (!confirm(`Supprimer « ${r.title} » ?`)) return;
+  for (const x of ids) { await Records.remove(x); await Records.remove("prep-" + x); await Records.remove("trip-" + x); }
+  notice = ""; redrawAll();
+}
+const redrawAll = () => { recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek(); };
+// Avertissements après l'enregistrement d'un déplacement ou d'un jour sans école.
+function eventNotice(r) {
+  const out = [], who = personName(r.person || "");
+  if (r.house) out.push(r.sitter ? `Lana : gardée par ${esc(r.sitter)}.` : `Lana sera seule : <b>personne ne la garde pour l'instant</b> (une alerte « Qui garde Lana ? » reste affichée tant que ce n'est pas noté).`);
+  if (r.date !== (r.end || r.date) || r.house || r.noschool) {
+    schoolDaysMissed(r.date, r.end || r.date, r.person).forEach(m => out.push(`${esc(personName(m.person))} : ${m.days.length} jour${m.days.length > 1 ? "s" : ""} ${m.person === "louanne" ? "de cours" : "d'école"} manqué${m.days.length > 1 ? "s" : ""} (${m.days.slice(0, 4).map(k => esc(fmt(parse(k)))).join(", ")}${m.days.length > 4 ? "…" : ""}).`));
+  }
+  if (r.noschool) out.push(`Pas d'école pour ${esc(who || "les enfants")} ce jour-là : la garde de A² à organiser est recalculée.`);
+  return out.length ? `<p class="alert warn">${out.join("<br>")}</p>` : "";
+}
+document.getElementById("detail").addEventListener("submit", async e => {
   if (e.target.id !== "evForm") return;
   e.preventDefault();
   const f = new FormData(e.target), v = n => (f.get(n) || "").toString().trim();
-  const rec = { id: editing && editing.id ? editing.id : Records.newId("e"), kind: "event", title: v("title"), date: v("date"), end: v("end"), time: v("time"), timeEnd: v("timeEnd"), person: f.getAll("person").join(","), note: v("note") };
+  const rec = { id: editing && editing.id ? editing.id : Records.newId("e"), kind: "event", title: v("title"), date: v("date"), end: v("end"), time: v("time"), timeEnd: v("timeEnd"), person: f.getAll("person").join(","), note: v("note"),
+    house: f.has("house"), sitter: v("sitter"), noschool: f.has("noschool"), remind: v("remind") };
+  if (editing && editing.series) rec.series = editing.series;
   const flash = t => { document.getElementById("evFlash").textContent = t; };
   if (!rec.title || !rec.date) return flash("Titre et date obligatoires.");
   if (rec.end && rec.end < rec.date) return flash("La date de fin précède le début.");
   if (rec.timeEnd && !rec.time) return flash("Indiquez l'heure de début avant l'heure de fin.");
   if (rec.time && rec.timeEnd && rec.timeEnd <= rec.time && (!rec.end || rec.end === rec.date)) return flash("L'heure de fin doit suivre l'heure de début.");
-  editing = null; selDay = rec.date; cur = new Date(parse(selDay)); cur.setDate(1);
-  refreshAll(Records.put(rec));
+  const repeat = v("repeat"), until = v("until");
+  if (repeat && until && until < rec.date) return flash("La répétition s'arrête avant la première date.");
+  // Répétition : une occurrence par semaine, par quinzaine ou par mois jusqu'à la date indiquée (6 mois par défaut, 60 occurrences au plus)
+  const list = [rec];
+  if (repeat) {
+    rec.series = rec.id; const stop = until || addDays(rec.date, 183), span = rec.end ? Math.round((parse(rec.end) - parse(rec.date)) / MS) : 0;
+    for (let i = 1; i < 60; i++) {
+      const d = repeat === "m" ? iso(new Date(+rec.date.slice(0, 4), +rec.date.slice(5, 7) - 1 + i, +rec.date.slice(8))) : addDays(rec.date, i * +repeat);
+      if (d > stop) break;
+      list.push({ ...rec, id: `${rec.id}-${i}`, date: d, end: rec.end ? addDays(d, span) : "" });
+    }
+  }
+  const today = todayIso(), prep = [];
+  if (f.has("prep")) prep.push({ id: "prep-" + rec.id, title: `Préparer : ${rec.title}`, cat: "Autre", who: rec.person && !rec.person.includes(",") ? rec.person : "moi", due: addDays(rec.date, -1) < today ? today : addDays(rec.date, -1), done: false });
+  if (rec.house || (rec.end && rec.end > rec.date && rec.person.split(",").length >= 2)) prep.push({ id: "trip-" + rec.id, title: `Avant le départ « ${rec.title} » : documents d'identité, courrier, plantes, voiture, réservations`, cat: "Vacances", who: "moi", due: addDays(rec.date, -7) < today ? today : addDays(rec.date, -7), done: false });
+  editing = null; selDay = rec.date; cur = new Date(parse(selDay)); cur.setDate(1); notice = eventNotice(rec);
+  for (const r of list) await Records.put(r);
+  for (const t of prep) if (!Records.local().some(x => x.id === t.id && x.done)) await Records.put(t);
+  redrawAll();
 });
-async function refreshAll(done) {
-  await done; recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek();
-}
-const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.dataset.d; editing = null; render(); const f = document.querySelector(".day.sel"); if (f) f.focus({ preventScroll: true }); } };
+const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.dataset.d; editing = null; notice = ""; render(); const f = document.querySelector(".day.sel"); if (f) f.focus({ preventScroll: true }); } };
 document.getElementById("grid").addEventListener("click", pick);
 document.getElementById("grid").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
 render(); upcoming(); renderHome();
 // Synchronisation au chargement, puis à chaque retour sur la page (application rouverte, réseau revenu, minuit passé).
-const redraw = () => { recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek(); };
+const redraw = redrawAll;
 Records.refresh().then(changed => { if (changed) redraw(); });
 Records.watch(({ newDay }) => {
   if (newDay) { selDay = todayIso(); cur = new Date(); cur.setDate(1); weekStart = WeekView.mondayOf(todayIso()); } // la page est restée ouverte : « aujourd'hui » avance

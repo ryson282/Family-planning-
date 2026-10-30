@@ -23,7 +23,7 @@ export function vevent({ uid, date, end, time, timeEnd, summary, description, al
   const out = ["BEGIN:VEVENT", `UID:${uid}@family-planning`, `DTSTAMP:${stamp()}`];
   if (time) {
     const hm = t => t.replace(":", "") + "00";
-    out.push(`DTSTART:${ymd(date)}T${hm(time)}`, `DTEND:${ymd(end && !timeEnd ? end : date)}T${hm(timeEnd || time)}`);
+    out.push(`DTSTART:${ymd(date)}T${hm(time)}`, `DTEND:${ymd(end || date)}T${hm(timeEnd || time)}`);
   } else out.push(`DTSTART;VALUE=DATE:${ymd(date)}`, `DTEND;VALUE=DATE:${ymd(addDay(end || date))}`);
   out.push(`SUMMARY:${icsText(summary)}`);
   if (description) out.push(`DESCRIPTION:${icsText(description)}`);

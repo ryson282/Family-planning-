@@ -90,6 +90,25 @@ function houseEmptyOn(day) {
   return (window.HOUSE_EMPTY || []).find(a => inRange(day, a.start, a.end));
 }
 
+// Événements scolaires du fichier + jours sans école saisis dans le site (journée pédagogique, grève : traités comme « Congé : … »).
+function schoolEventsAll() {
+  const own = (window.USER_EVENTS || []).filter(r => r.noschool).map(r => ({ date: r.date, end: r.end || r.date, title: "Congé : " + r.title, person: r.person || KIDS.join(",") }));
+  return [...(window.SCHOOL_EVENTS || []), ...own];
+}
+// Jours d'école (ou de cours) manqués par une absence : jours de semaine où la personne n'est pas déjà en congé.
+function schoolDaysMissed(start, end, persons) {
+  const ids = String(persons || "").split(",").filter(p => STUDENTS.includes(p)), out = [];
+  ids.forEach(id => {
+    const days = [];
+    for (let k = start; k <= end && days.length < 40; k = addDays(k, 1)) {
+      const d = parse(k).getDay();
+      if (d === 0 || d === 6 || congesOn(k).some(c => c.persons.includes(id))) continue;
+      days.push(k);
+    }
+    if (days.length) out.push({ person: id, days });
+  });
+  return out;
+}
 // Jours fériés et congés isolés (Armistice, lundi de Pâques, « Congé : Mardi gras » des événements scolaires...).
 function daysOff() {
   const seen = new Set(), out = [];
@@ -97,7 +116,7 @@ function daysOff() {
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "ferie").forEach(h => {
     for (let k = h.start; k <= h.end; k = addDays(k, 1)) push(k, h.name, h.src);
   });
-  (window.SCHOOL_EVENTS || []).filter(e => /^Congé : /.test(e.title)).forEach(e => push(e.date, e.title.replace(/^Congé : /, "")));
+  schoolEventsAll().filter(e => /^Congé : /.test(e.title)).forEach(e => { for (let k = e.date; k <= (e.end || e.date); k = addDays(k, 1)) push(k, e.title.replace(/^Congé : /, "")); });
   return out;
 }
 
@@ -208,7 +227,7 @@ function congePeriods() {
     if (h.type === "vacances") out.push({ name: h.name, start: h.start, end: h.end, persons: KIDS });
     else if (h.type === "ferie") out.push({ name: h.name, start: h.start, end: h.end, persons: STUDENTS }); // l'ULiège suspend aussi ses activités
   });
-  (window.SCHOOL_EVENTS || []).forEach(e => {
+  schoolEventsAll().forEach(e => {
     if (/^Congé : /.test(e.title)) out.push({ name: e.title.replace(/^Congé : /, ""), start: e.date, end: e.end || e.date, persons: String(e.person).split(",") });
     else if (e.person === "louanne" && /^ULiège : (vacances|congé)/.test(e.title)) out.push({ name: e.title.replace(/^ULiège : /, ""), start: e.date, end: e.end || e.date, persons: ["louanne"] });
   });
@@ -288,7 +307,7 @@ function allEvents() {
       timeEnd: !e.allDay && end.slice(0, 10) === e.start.slice(0, 10) ? end.slice(11, 16) : "" });
   });
   // Événements saisis dans le site (assets/records.js) : le champ person liste les personnes concernées (vide = toute la famille).
-  (window.USER_EVENTS || []).forEach(r => out.push({ date: r.date, end: r.end && r.end >= r.date ? r.end : r.date, title: r.title, source: "Site", person: r.person || "", time: r.time || "", timeEnd: r.time && r.timeEnd && (!r.end || r.end === r.date) ? r.timeEnd : "", note: r.note || "", rec: r.id }));
+  (window.USER_EVENTS || []).forEach(r => out.push({ date: r.date, end: r.end && r.end >= r.date ? r.end : r.date, title: r.title, source: "Site", person: r.person || "", time: r.time || "", timeEnd: r.time && r.timeEnd && (!r.end || r.end === r.date) ? r.timeEnd : "", note: r.note || "", endTime: r.time && r.timeEnd ? r.timeEnd : "", rec: r.id }));
   (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.end || e.date, title: e.title, source: "École", person: e.person, time: e.time || "", timeEnd: "", todo: e.todo, amount: e.amount, needsParent: e.needsParent, note: e.note }));
   return out;
 }

@@ -5,7 +5,7 @@
 //   "childcare"  solution de garde organisée pendant un congé : { start, end, solution, status: "confirmé" | "à confirmer", note }
 //   "house"      garde de Lana quand la maison est vide : { start, end, sitter, note }
 //   "holiday"    décision pour un congé : { key, year, status: "decide" | "part" | "reste", dest, dates, lodging, transport, budget, note }
-//   "event"      événement saisi dans le site : { title, date, end, time, timeEnd, person, note }
+//   "event"      événement saisi dans le site : { title, date, end, time, timeEnd, person, note, house, sitter, noschool, remind, series }
 //   "deadline"   échéance propre au foyer (assurance auto, carte d'identité...) : { title, date, every, lead, who, cat, note }
 // Les pages qui en dépendent appellent Records.apply() avant de se dessiner, puis Records.refresh() pour se mettre à jour.
 const Records = (() => {
@@ -23,7 +23,11 @@ const status = () => { if (typeof renderStatus === "function") renderStatus(); }
     window.CUSTODY_OVERRIDES = Object.fromEntries(of("override", list).filter(r => r.date && ["moi", "autre", "echange"].includes(r.who)).map(r => [r.date, r.who]));
     const cp = of("childcare", list).filter(r => r.start && r.end), hr = of("house", list).filter(r => r.start && r.end);
     window.CHILDCARE_PLANS = [...base.plans.filter(b => !cp.some(r => r.start === b.start && r.end === b.end)), ...cp.map(r => ({ start: r.start, end: r.end, solution: r.solution + (r.status === "à confirmer" ? " (à confirmer)" : ""), record: r.id }))];
-    window.HOUSE_EMPTY = [...base.house.filter(b => !hr.some(r => r.start === b.start && r.end === b.end)), ...hr.map(r => ({ start: r.start, end: r.end, sitter: r.sitter || "", note: r.note || "", record: r.id }))];
+    const houses = [...base.house.filter(b => !hr.some(r => r.start === b.start && r.end === b.end)), ...hr.map(r => ({ start: r.start, end: r.end, sitter: r.sitter || "", note: r.note || "", record: r.id }))];
+    // Un événement « la maison sera vide » (voyage, déplacement) rend Lana seule : alerte tant que personne ne la garde.
+    of("event", list).filter(r => r.house && r.date).map(r => ({ start: r.date, end: r.end && r.end >= r.date ? r.end : r.date, sitter: r.sitter || "", note: r.title, record: r.id }))
+      .filter(t => t.sitter || !houses.some(h => h.sitter && h.start <= t.start && h.end >= t.end)).forEach(t => houses.push(t));
+    window.HOUSE_EMPTY = houses;
     window.HOLIDAY_DECISIONS = Object.fromEntries(of("holiday", list).map(r => [`${r.key}:${r.year}`, r]));
     window.HOUSEHOLD_DEADLINES = of("deadline", list);
     window.USER_EVENTS = of("event", list).filter(r => r.title && r.date);

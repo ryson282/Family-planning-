@@ -13,7 +13,7 @@
 <header><h1>Tâches familiales</h1></header>
 <main>
   <section class="card">
-    <div class="bar"><h2>À faire</h2><span class="late" id="lateCount"></span><select id="filter" aria-label="Filtrer par personne"><option value="">Toutes les personnes</option></select><label class="check muted"><input type="checkbox" id="showDone"> voir les terminées</label></div>
+    <div class="bar"><h2>À faire</h2><span class="late" id="lateCount"></span><select id="filter" aria-label="Filtrer par personne"><option value="">Toutes les personnes</option></select><select id="me" aria-label="Je suis" title="Sur cet appareil, la liste s'ouvre sur vos tâches"><option value="">Je suis…</option><option value="moi">Je suis Yves</option><option value="emilie">Je suis Émilie</option></select><label class="check muted"><input type="checkbox" id="showDone"> voir les terminées</label></div>
     <ul class="list" id="list"></ul>
     <details class="add-box">
       <summary><b>+ Nouvelle tâche</b></summary>
@@ -48,10 +48,12 @@
       <summary><b>Échéances du foyer</b> <span class="muted" id="dueCount"></span></summary>
       <p class="muted">Dates propres à votre foyer (renouvellement de l'assurance auto, contrôle technique, carte d'identité, vaccin de Lana…) : elles apparaissent dans les suggestions et dans le flux de rappels avant l'échéance.</p>
       <ul class="list" id="dueList"></ul>
+      <p class="muted" style="margin-bottom:4px">À saisir une fois (touchez un modèle, puis indiquez la date) :</p>
+      <div class="dacts" id="duePresets"><button type="button" class="mini" data-dp="Contrôle technique Dacia">Contrôle technique Dacia</button><button type="button" class="mini" data-dp="Contrôle technique Kia">Contrôle technique Kia</button><button type="button" class="mini" data-dp="Assurance auto">Assurance auto</button><button type="button" class="mini" data-dp="Assurance habitation">Assurance habitation</button><button type="button" class="mini" data-dp="Taxe de circulation">Taxe de circulation</button><button type="button" class="mini" data-dp="Précompte immobilier">Précompte immobilier</button><button type="button" class="mini" data-dp="Carte d&#39;identité ou Kids-ID">Carte d&#39;identité ou Kids-ID</button><button type="button" class="mini" data-dp="Permis de conduire">Permis de conduire</button><button type="button" class="mini" data-dp="Vaccin et bilan de Lana (véto)">Vaccin et bilan de Lana (véto)</button><button type="button" class="mini" data-dp="Mutuelle : attestations">Mutuelle : attestations</button></div>
       <form class="add" id="dueForm">
         <input id="dueTitle" placeholder="Ex. Assurance auto Dacia" aria-label="Intitulé de l'échéance" required>
         <input id="dueDate" type="date" aria-label="Prochaine échéance" required>
-        <select id="dueEvery" aria-label="Fréquence"><option value="0">Une seule fois</option><option value="1" selected>Chaque année</option><option value="2">Tous les 2 ans</option><option value="5">Tous les 5 ans</option><option value="10">Tous les 10 ans</option></select>
+        <select id="dueEvery" aria-label="Fréquence"><option value="0">Une seule fois</option><option value="1" selected>Chaque année</option><option value="2">Tous les 2 ans</option><option value="3">Tous les 3 ans</option><option value="5">Tous les 5 ans</option><option value="6">Tous les 6 ans</option><option value="10">Tous les 10 ans</option></select>
         <select id="dueLead" aria-label="Prévenir"><option value="30">Prévenir 30 j avant</option><option value="60" selected>Prévenir 60 j avant</option><option value="90">Prévenir 90 j avant</option></select>
         <select id="dueWho" aria-label="Pour qui"></select>
         <button class="primary">Ajouter</button>
@@ -78,6 +80,7 @@
 <dialog id="dlg">
   <form id="dlgForm" method="dialog">
     <h3 id="dlgTitle" style="margin-top:0"></h3>
+    <div class="two"><label class="dlgrow"><span>Du</span><input type="date" id="dlgFrom" required></label><label class="dlgrow"><span>Au</span><input type="date" id="dlgTo" required></label></div>
     <label class="dlgrow"><span id="dlgWhoLabel">Solution</span><input id="dlgWho" required autocomplete="off"></label>
     <label class="dlgrow" id="dlgStatusRow"><span>Statut</span><select id="dlgStatus"><option>confirmé</option><option>à confirmer</option></select></label>
     <label class="dlgrow"><span>Note (facultatif)</span><input id="dlgNote" autocomplete="off"></label>
@@ -107,9 +110,13 @@ Records.apply(tasks);
 const save = () => { Records.saveLocal(tasks); Records.apply(tasks); };
 const people = [{ id: "famille", name: "Famille" }, ...(window.PEOPLE || [])];
 const opts = people.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
-document.getElementById("who").innerHTML = opts;
+// Une tâche a un responsable : « Famille » n'en est pas un (chacun croit que l'autre s'en occupe). Il reste pour les échéances et les anciennes tâches.
+const taskPeople = people.filter(p => p.id !== "famille");
+document.getElementById("who").innerHTML = taskPeople.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+const whoSelect = (id, cur) => `<select class="whosel" data-who="${esc(id)}" aria-label="Responsable">${(cur === "famille" ? people : taskPeople).map(p => `<option value="${esc(p.id)}"${p.id === cur ? " selected" : ""}>${esc(p.id === "famille" ? "À attribuer" : p.name.replace(/ \(.*\)/, ""))}</option>`).join("")}</select>`;
 document.getElementById("due").value = addDays(iso(new Date()), 1); // une tâche sans date n'est jamais rappelée : demain par défaut
 document.getElementById("filter").insertAdjacentHTML("beforeend", opts);
+try { const me = localStorage.getItem("family-me") || ""; document.getElementById("me").value = me; document.getElementById("filter").value = me; } catch (e) {} // la liste s'ouvre sur les tâches de la personne qui tient cet appareil
 const nameOf = id => (people.find(p => p.id === id) || {}).name || id;
 const nowMs = () => taskSync.now();
 const hash = s => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.codePointAt(0)) >>> 0; return h.toString(36); };
@@ -168,6 +175,7 @@ function outings() {
 
 function add(t) {
   const { key, recurring, start, lead, deadline, record, plan, ...rest } = t;
+  if (rest.who === "famille") rest.who = "moi"; // Yves par défaut ; à réattribuer d'un geste dans la liste
   const n = { id: key ? "s" + hash(key) : "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), done: false, ...rest, updated: nowMs() };
   tasks = tasks.filter(x => String(x.id) !== String(n.id)); tasks.push(n); save(); render(); remotePush(n);
 }
@@ -213,14 +221,14 @@ const byDue = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.t
 function render() {
   purgePast();
   const f = document.getElementById("filter").value, sd = document.getElementById("showDone").checked, today = iso(new Date());
-  const mine = tasks.filter(t => !t.kind && !t.dismissed && (!f || t.who === f));
+  const mine = tasks.filter(t => !t.kind && !t.dismissed && (!f || t.who === f || t.who === "famille"));
   const rows = [...mine.filter(t => !t.done).sort(byDue), ...(sd ? mine.filter(t => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)) : [])];
   const late = mine.filter(t => !t.done && t.due && t.due < today).length;
   document.getElementById("lateCount").textContent = late ? `⚠ ${late} en retard` : "";
   const empty = mine.length ? "Tout est fait ✓" : "Aucune tâche.";
   document.getElementById("list").innerHTML = rows.length ? rows.map(t => `
     <li class="item task ${t.done ? "done" : ""}"><input type="checkbox" data-id="${esc(t.id)}" ${t.done ? "checked" : ""} aria-label="Terminée">
-    <span class="t">${esc(t.title)}${t.note ? `<small class="note">${esc(t.note)}</small>` : ""}</span><span class="meta"><span class="tag">${esc(nameOf(t.who))}</span>${catTag(t.cat)}
+    <span class="t">${esc(t.title)}${t.note ? `<small class="note">${esc(t.note)}</small>` : ""}</span><span class="meta">${whoSelect(t.id, t.who)}${catTag(t.cat)}
     <span class="${t.due && t.due < today && !t.done ? "late" : "muted"}">${t.due ? esc(fmt(parse(t.due)) + hm(t.time)) : ""}</span>${t.due && !t.done ? `<button class="mini" data-snooze="${esc(t.id)}" title="Reporter d'une semaine">+1 sem.</button>` : ""}</span>
     <button data-del="${esc(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button></li>`).join("") : `<li class="muted">${empty}</li>`;
   const s = suggestions();
@@ -252,12 +260,15 @@ document.addEventListener("click", e => {
   if (d.s) { const x = window._s[d.s]; if (x) add({ ...x, key: x.title }); }
   if (d.x) { const x = window._s[d.x]; if (x) add({ ...x, key: x.title, dismissed: true, done: true }); }
   if (d.p) { const x = window._s[d.p]; if (x && x.plan) openPlan(x); }
+  if (d.dp) { document.getElementById("dueTitle").value = d.dp; document.getElementById("dueDate").focus(); return; }
   if (d.dd) { const r0 = Records.of("deadline", tasks).find(r => String(r.id) === d.dd); if (r0 && !confirm(`Supprimer l'échéance « ${r0.title} » ?`)) return; Records.remove(d.dd).then(() => { tasks = Records.local(); render(); }); }
   if (d.o) { const o = window._o[d.o]; if (o) add({ title: o.title, who: "moi", cat: "Sorties", due: o.due, until: o.until, key: o.title }); }
 });
 document.addEventListener("change", e => {
   if (e.target.dataset.id) { const t = tasks.find(t => String(t.id) === e.target.dataset.id); if (!t) return; t.done = e.target.checked; t.doneAt = t.done ? nowMs() : undefined; t.updated = nowMs(); save(); render(); remotePush(t); }
+  else if (e.target.dataset.who) { const t = tasks.find(t => String(t.id) === e.target.dataset.who); if (!t) return; t.who = e.target.value; t.updated = nowMs(); save(); render(); remotePush(t); }
   else if (e.target.id === "filter" || e.target.id === "showDone") render();
+  else if (e.target.id === "me") { try { localStorage.setItem("family-me", e.target.value); } catch (x) {} document.getElementById("filter").value = e.target.value; render(); }
 });
 // Solutions de garde (A² en congé, Lana) : enregistrées comme enregistrements partagés ; la suggestion disparaît.
 let planCtx = null;
@@ -268,13 +279,16 @@ function openPlan(x) {
   document.getElementById("dlgWhoLabel").textContent = isHouse ? "Qui s'en occupe" : "Solution (stage, grands-parents…)";
   document.getElementById("dlgStatusRow").hidden = isHouse;
   ["dlgWho", "dlgNote"].forEach(i => { document.getElementById(i).value = ""; });
+  document.getElementById("dlgFrom").value = x.plan.start; document.getElementById("dlgTo").value = x.plan.end; // dates modifiables : la solution peut ne couvrir qu'une partie de la période
   dlg.showModal();
 }
 document.getElementById("dlgCancel").onclick = () => dlg.close();
 document.getElementById("dlgForm").onsubmit = async e => {
   e.preventDefault();
   const who = document.getElementById("dlgWho").value.trim(), note = document.getElementById("dlgNote").value.trim(), p = planCtx;
-  if (!who || !p) return;
+  const from = document.getElementById("dlgFrom").value, to = document.getElementById("dlgTo").value;
+  if (!who || !p || !from || !to || to < from) return;
+  p.start = from; p.end = to;
   dlg.close();
   await Records.put(p.type === "house" ? { id: `l${p.start}${p.end}`, kind: "house", start: p.start, end: p.end, sitter: who, note }
     : { id: `c${p.start}${p.end}`, kind: "childcare", start: p.start, end: p.end, solution: who, status: document.getElementById("dlgStatus").value, note });
@@ -297,7 +311,7 @@ function renderLastOuting() {
 document.getElementById("outDone").onclick = async () => { await Records.put({ id: Records.newId("g"), kind: "outing", date: iso(new Date()) }); tasks = Records.local(); render(); };
 
 // Échéances du foyer (enregistrements « deadline »)
-const EVERY = { 0: "une seule fois", 1: "chaque année", 2: "tous les 2 ans", 5: "tous les 5 ans", 10: "tous les 10 ans" };
+const EVERY = { 0: "une seule fois", 1: "chaque année", 2: "tous les 2 ans", 3: "tous les 3 ans", 5: "tous les 5 ans", 6: "tous les 6 ans", 10: "tous les 10 ans" };
 document.getElementById("dueWho").innerHTML = opts;
 function renderDeadlines() {
   const l = Records.of("deadline", tasks).sort((a, b) => (a.date || "").localeCompare(b.date || ""));

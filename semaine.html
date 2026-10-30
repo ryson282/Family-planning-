@@ -118,16 +118,22 @@ function alerts() {
     out.push(`<span class="warn">Sans A² :</span> pas de garderie à récupérer (mardi, vendredi), Adrian et Alixia n'apparaissent pas.`);
     out.push(`<span class="warn">Lundi soir :</span> Yves va seul chercher Louanne à Liège (18 h) ; solfège à ${T(M(S.louanne.activities[0].start))}. Créneau estimé de ${T(M(r.estimated[0]))} à ${T(M(r.estimated[1]))}.`);
   }
-  const cars = {};
-  const useCar = (name, label, day) => { (cars[name] = cars[name] || []).push([day, label]); };
-  useCar(S.louanne.commute.pickup.car, `lundi vers ${T(M(r.estimated[0]))} (Louanne à Liège)`, 1);
-  const seen = new Set();
-  [S.emilie, S.louanne].forEach(x => (x.activities || []).filter(a => a.by).forEach(a => a.days.forEach(n => {
-    const k = `${a.by}${n}${a.start}`; if (seen.has(k)) return; seen.add(k);
-    useCar(a.by, `${DAYS.find(([d]) => d === n)[1].toLowerCase()} à ${T(M(a.start))} (${a.name.replace(/ \(.*\)/, "").toLowerCase()})`, n);
-  })));
-  const owner = n => shortName(S.cars[n]);
-  out.push(`<span class="warn">Voitures :</span> ${Object.entries(cars).map(([n, l]) => `${n} (${owner(n)}) : ${l.sort((x, y) => x[0] - y[0]).map(x => x[1]).join(" ; ")}`).join(". ")}. Chacun a sa voiture : pas de conflit.`);
+  // Voitures : chaque usage (jour, début, fin) est rattaché à une voiture ; deux usages qui se chevauchent sur la même voiture = conflit.
+  const uses = [], hm = M;
+  const addUse = (car, day, a, b, label) => { if (!uses.some(u => u.car === car && u.day === day && u.a === a && u.b === b)) uses.push({ car, day, a, b, label }); };
+  const rt = S.routines[0];
+  addUse(S.louanne.commute.pickup.car, 1, hm(rt.estimated[0]), hm(rt.estimated[1]), "Louanne à Liège");
+  S.lukas.activities.filter(a => a.escort === "moi" && a.blocked).forEach(a => a.days.forEach(d => addUse(Object.keys(S.cars).find(c => S.cars[c] === "moi"), d, hm(a.blocked[0]), hm(a.blocked[1]), `${a.name} de Lukas`)));
+  [S.emilie, S.louanne].forEach(x => (x.activities || []).filter(a => a.by && a.start && a.end).forEach(a => a.days.forEach(d => addUse(a.by, d, hm(a.start), hm(a.end), a.name.replace(/ \(.*\)/, "").toLowerCase()))));
+  const conflicts = [];
+  uses.forEach((u, i) => uses.slice(i + 1).forEach(v => { if (u.car === v.car && u.day === v.day && u.a < v.b && v.a < u.b) conflicts.push(`${DAYS.find(([d]) => d === u.day)[1].toLowerCase()} : ${u.car} demandée pour « ${u.label} » et « ${v.label} »`); }));
+  const byCar = {};
+  uses.forEach(u => (byCar[u.car] = byCar[u.car] || []).push(u));
+  const lab = u => `${DAYS.find(([d]) => d === u.day)[1].toLowerCase()} ${T(u.a)} (${u.label})`;
+  out.push(`<span class="warn">Voitures :</span> ${Object.entries(byCar).map(([n, l]) => `${n} (${shortName(S.cars[n])}) : ${l.sort((x, y) => x.day - y.day || x.a - y.a).map(lab).join(" ; ")}`).join(". ")}. ${conflicts.length ? `<b>Conflit : ${conflicts.join(" ; ")}.</b>` : "Aucun conflit d'usage calculé."}`);
+  const pb = S.planB || {};
+  const open = Object.entries(pb).filter(([, v]) => !v);
+  if (Object.keys(pb).length) out.push(`<span class="warn">Plans B :</span> ${Object.entries(pb).map(([k, v]) => `${esc(k)} → ${v ? esc(v) : "<i>à définir</i>"}`).join(" ; ")}.`);
   const todo = [];
   [S.emilie, S.louanne].forEach((x, i) => (x.activities || []).filter(a => a.uncertain).forEach(a => todo.push(`${a.name} (${i ? "Louanne" : "Émilie"}) : ${a.note || "à confirmer"}`)));
   if (todo.length) out.push(`<span class="warn">À préciser :</span> ${todo.map(esc).join(" ; ")}.`);

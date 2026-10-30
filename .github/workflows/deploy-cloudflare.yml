@@ -49,7 +49,7 @@ jobs:
         if: steps.cfg.outputs.ready == 'true'
         run: |
           mkdir dist
-          cp index.html taches.html semaine.html manifest.webmanifest dist/
+          cp index.html taches.html semaine.html vacances.html manifest.webmanifest dist/
           cp -r assets data dist/
       - name: Flux iCal des rappels (si le secret FEED_TOKEN existe)
         if: steps.cfg.outputs.ready == 'true'

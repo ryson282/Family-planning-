@@ -2,36 +2,16 @@
 // événements scolaires, tâches avec échéance, rappels annuels, alertes « garde à organiser ». Les alarmes sont intégrées aux événements.
 // Usage : FEED_TOKEN=<secret> node scripts/build-feed.mjs <dossier du site>   -> <dossier>/ics/<jeton>/famille.ics
 // Sans FEED_TOKEN (secret GitHub), rien n'est généré. Le jeton fait partie de l'adresse : ne pas la partager.
-import vm from "node:vm";
-import { readFileSync, readdirSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
-import { vevent, alarmAllDay, alarmBefore, calendar, addDay } from "./lib-ics.mjs";
+import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { vevent, alarmAllDay, alarmBefore, calendar } from "./lib-ics.mjs";
+import { loadSite } from "./lib-site.mjs";
 
 const out = process.argv[2] || "dist", token = process.env.FEED_TOKEN || "";
 if (token.length < 16) { console.log("::warning::FEED_TOKEN absent ou trop court (16 caractères minimum) : flux iCal non généré."); process.exit(0); }
 if (!/^[A-Za-z0-9_-]+$/.test(token)) { console.error("FEED_TOKEN ne doit contenir que des lettres, chiffres, - et _."); process.exit(1); }
 
-let stored = [];
-const ctx = vm.createContext({ document: {}, console, localStorage: { getItem: () => JSON.stringify(stored), setItem() {} } });
-ctx.window = ctx;
-const load = f => vm.runInContext(readFileSync(f, "utf8"), ctx, { filename: f });
-readdirSync("data").filter(f => f.endsWith(".js")).forEach(f => load("data/" + f));
-["assets/common.js", "assets/schedule.js", "assets/records.js"].forEach(load);
-const run = code => vm.runInContext(code, ctx);
-
-// Enregistrements partagés (tâches, exceptions de garde, décisions) : lecture seule dans Supabase avec la clé publique.
-const cfg = { url: process.env.SYNC_URL || (ctx.SYNC_CONFIG || {}).url, key: process.env.SYNC_KEY || (ctx.SYNC_CONFIG || {}).key }; // SYNC_URL / SYNC_KEY : surcharge (tests)
-if (cfg.url && cfg.key) {
-  try {
-    const res = await fetch(`${cfg.url}/rest/v1/family_tasks?select=id,data`, { headers: { apikey: cfg.key, Authorization: "Bearer " + cfg.key }, signal: AbortSignal.timeout(20000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    stored = (await res.json()).map(r => r && r.data).filter(d => d && typeof d === "object" && d.id !== undefined);
-  } catch (e) { console.log(`::warning::Tâches non lues dans Supabase (${e.message}) : flux généré sans elles.`); }
-}
-run("Records.apply()");
-
-const today = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Europe/Brussels" }).slice(0, 10) + "T12:00:00Z").toISOString().slice(0, 10);
+const { ctx, run, stored, today, names } = await loadSite();
 const horizon = 400, limit = run(`addDays(${JSON.stringify(today)}, ${horizon})`);
-const names = ids => run(`String(${JSON.stringify(ids || "")}).split(",").filter(Boolean).map(i => ((window.PEOPLE.find(p => p.id === i) || {}).name || i).replace(/ \\(.*\\)/, "")).join(", ")`);
 const events = [];
 const TITLES = { moi: "Garde A² chez Yves", autre: "A² chez Emeline", echange: "Jour d'échange A²" }; // le prénom n'apparaît que dans ce flux privé (comme l'export de garde)
 

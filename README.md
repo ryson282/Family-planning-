@@ -82,3 +82,11 @@ Le flux n'est généré que si `FEED_TOKEN` existe.
 - **Tâches → Suggestions → « Organisé »** : noter la solution trouvée pour la garde de A² pendant un congé (stage, grands-parents…) ou pour Lana ; la suggestion et l'alerte disparaissent.
 - **Tâches → Échéances du foyer** : dates propres au foyer (assurance auto, contrôle technique, carte d'identité, vaccin de Lana…), annuelles ou ponctuelles ; elles reviennent en suggestion avant l'échéance et dans le flux de rappels.
 - **Événements scolaires** (`data/school-events.js`) : champs facultatifs `time`, `todo` (action : génère une tâche proposée 30 jours avant), `dueOffset`, `amount`, `needsParent` (présence d'un parent requise : visible dans la ligne d'Yves même quand les enfants sont chez l'autre parent), `note`.
+
+## Récapitulatif du dimanche
+Le workflow « Récapitulatif du dimanche » (dimanche 16 h 30 UTC) publie le récapitulatif de la semaine qui vient (à traiter, jour par jour avec les changements et conflits, tâches de la semaine, à anticiper sur 2 à 4 semaines) comme **issue** du dépôt : GitHub vous envoie alors un e-mail et une notification, sans rien configurer. Option : avec les secrets `RESEND_API_KEY` et `DIGEST_TO` (et `DIGEST_FROM`), le même texte part aussi par e-mail via Resend. Lancement à la demande : Actions → « Récapitulatif du dimanche » → Run workflow.
+
+## Page Vacances et sorties à deux
+- **Vacances** : une carte par congé des deux prochaines années (fenêtres de départ possibles : A² chez l'autre parent et disponibilité de Louanne ; garde de A² à organiser ; Lana) avec la décision (on part / on reste / à décider), dates, destination, budget, réservations, documents, qui garde Lana. « On part » avec dates alimente le flux iCal ; la décision retire les suggestions de planification correspondantes ; une personne pour Lana note la garde (plus d'alerte). En dessous : ponts et jours fériés, avec le week-end concerné et où sont les enfants.
+- **Sorties avec Émilie** (page Tâches) : heure de libération de chaque soir ; bouton « On est sortis aujourd'hui » ; rappel quand la dernière sortie remonte à plus de 3 semaines.
+- **Conflits** : la vue Semaine signale (⚠) un événement horaire qui chevauche une autre activité de la même personne ; la page Semaine type calcule les usages de chaque voiture et affiche les « plans B » à définir (`planB` dans `data/schedules.js`).

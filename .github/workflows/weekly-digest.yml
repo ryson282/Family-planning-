@@ -1,0 +1,46 @@
+name: Récapitulatif du dimanche
+
+# Chaque dimanche en fin d'après-midi : récapitulatif de la semaine qui vient (à traiter, jour par jour, échéances, à anticiper),
+# publié comme « issue » du dépôt (GitHub envoie un e-mail et une notification) et, si les secrets existent, par e-mail (Resend).
+# Secrets facultatifs : RESEND_API_KEY, DIGEST_TO (adresse), DIGEST_FROM (expéditeur ; défaut onboarding@resend.dev).
+on:
+  schedule:
+    - cron: "30 16 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Générer le récapitulatif
+        run: node scripts/weekly-digest.mjs > digest.md
+      - name: Publier (issue GitHub)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          title=$(head -1 digest.md | sed 's/^# //')
+          printf '\n\ncc @%s\n' "$OWNER" >> digest.md
+          gh label create digest --color 5319e7 --description "Récapitulatif hebdomadaire" 2>/dev/null || true
+          for n in $(gh issue list --label digest --state open --json number -q '.[].number'); do
+            gh issue close "$n" --comment "Remplacé par le récapitulatif suivant."
+          done
+          gh issue create --title "$title" --body-file digest.md --label digest
+      - name: Envoyer par e-mail (si configuré)
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DIGEST_TO: ${{ secrets.DIGEST_TO }}
+          DIGEST_FROM: ${{ secrets.DIGEST_FROM }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$DIGEST_TO" ]; then echo "E-mail non configuré : seule l'issue GitHub est publiée."; exit 0; fi
+          title=$(head -1 digest.md | sed 's/^# //')
+          jq -n --arg from "${DIGEST_FROM:-onboarding@resend.dev}" --arg to "$DIGEST_TO" --arg subject "$title" --rawfile text digest.md '{from:$from,to:[$to],subject:$subject,text:$text}' > mail.json
+          curl -fsS -X POST https://api.resend.com/emails -H "Authorization: Bearer $RESEND_API_KEY" -H "Content-Type: application/json" -d @mail.json

@@ -116,6 +116,12 @@ if (!errors.length) {
   } catch (e) { err("logique du site", `exception sur les données actuelles : ${e.stack.split("\n").slice(0, 3).join(" | ")}`); }
 }
 
+// Publication : toutes les pages à la racine doivent être copiées par le workflow de déploiement (sinon le lien du menu est mort en ligne)
+try {
+  const deploy = readFileSync(".github/workflows/deploy-cloudflare.yml", "utf8");
+  readdirSync(".").filter(f => f.endsWith(".html")).forEach(f => { if (!deploy.includes(f)) err(".github/workflows/deploy-cloudflare.yml", `la page ${f} n'est pas copiée dans le site publié`); });
+} catch (e) { /* workflow absent : rien à contrôler */ }
+
 // Péremption : prévenir bien avant la rentrée suivante
 const today = new Date().toISOString().slice(0, 10), plus = n => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 const lastEvent = (W.SCHOOL_EVENTS || []).reduce((m, e) => ((e.end || e.date || "") > m ? (e.end || e.date) : m), "");

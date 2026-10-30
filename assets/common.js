@@ -153,7 +153,7 @@ function awayPeriods() {
     let run = null;
     const close = () => { if (run && run.days >= 4) out.push({ ...run, louanne: louanneNote(run.start, run.end) }); run = null; };
     for (let k = addDays(h.start, -2); k <= addDays(h.end, 2); k = addDays(k, 1)) {
-      if (custodyOn(k) === "autre") { if (run) { run.end = k; run.days++; } else run = { holiday: h.name, start: k, end: k, days: 1 }; }
+      if (custodyOn(k) === "autre") { if (run) { run.end = k; run.days++; } else run = { holiday: h.name, hstart: h.start, start: k, end: k, days: 1 }; }
       else close();
     }
     close();
@@ -291,6 +291,18 @@ function allEvents() {
   return out;
 }
 
+// Actions à faire liées aux événements scolaires (todo, dueOffset, amount, time dans data/school-events.js) :
+// proposées `lead` jours avant leur échéance ; toutes si all = true.
+function schoolTodos(today, { all = false, lead = 30 } = {}) {
+  const nm = id => ((window.PEOPLE || []).find(p => p.id === id) || {}).name || id;
+  return (window.SCHOOL_EVENTS || []).filter(e => e.todo && (e.end || e.date) >= today).map(e => {
+    const ids = String(e.person || "").split(",").filter(Boolean), names = ids.map(nm).map(n => n.replace(/ \(.*\)/, "")).join(", ");
+    const due = addDays(e.date, e.dueOffset === undefined ? -3 : e.dueOffset);
+    return { title: `${e.todo} — ${e.title}${names ? ` (${names})` : ""}`, cat: "École", who: ids.length === 1 ? ids[0] : "famille", due: due < today ? today : due, until: e.end || e.date,
+      note: [e.amount && `Montant : ${e.amount}`, e.time && `à ${e.time.replace(":", " h ")}`, e.needsParent && "présence d'un parent requise", e.note].filter(Boolean).join(" · ") || undefined };
+  }).filter(t => all || t.due <= addDays(today, lead));
+}
+
 // Tâches annuelles (data/recurring-tasks.js) et échéances propres au foyer (enregistrements « deadline ») : prochaine occurrence encore à faire.
 // all = true : toutes, même hors de leur fenêtre d'anticipation (flux iCal). Sinon seulement celles à moins de `lead` jours.
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -346,5 +358,5 @@ function lateCount() {
 function nav(active) {
   const n = lateCount(), link = (href, id, label) => `<a href="${href}" class="${active === id ? "on" : ""}">${label}</a>`;
   document.querySelector("header").insertAdjacentHTML("beforeend",
-    `<nav>${link("index.html", "p", "Planning")}${link("semaine.html", "s", "Semaine type")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}</span>` : ""}`)}</nav>`);
+    `<nav>${link("index.html", "p", "Planning")}${link("semaine.html", "s", "Semaine type")}${link("vacances.html", "v", "Vacances")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}</span>` : ""}`)}</nav>`);
 }

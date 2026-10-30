@@ -76,5 +76,12 @@ window.SCHEDULES = {
         "Retour à la maison pour que Louanne mange avant son solfège (19 h 10)"
       ]
     }
-  ]
+  ],
+  // Plans B (à compléter ensemble) : que faire quand quelque chose déraille ? Affichés sur la page Semaine type (« à définir » tant que c'est vide).
+  planB: {
+    "Retard ou grève de train le mardi (marge de 20 min avant la fermeture de la garderie)": "",
+    "Yves malade ou indisponible (garderie, train du mardi)": "",
+    "Panne d'une voiture": "",
+    "Louanne rentre tard ou rate son train": ""
+  }
 };

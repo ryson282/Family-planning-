@@ -46,17 +46,26 @@ const WeekView = (() => {
           rows[rows[id] ? id : "famille"].push({ a, b, label: e.title, status: "added" });
         });
       });
+      // Conflits : un événement horaire (agenda, école) qui chevauche une autre activité de la même personne ce jour-là
+      let conflicts = 0;
+      ORDER.forEach(id => {
+        const timed = rows[id].filter(x => x.a !== undefined && x.status !== "removed"), end = x => (x.b !== undefined ? x.b : x.a + 60);
+        timed.filter(x => x.status === "added").forEach(x => {
+          const o = timed.find(y => y !== x && x.a < end(y) && y.a < end(x));
+          if (o) { x.conflict = true; x.why = `chevauche « ${o.label} »`; conflicts++; }
+        });
+      });
       const list = ORDER.filter(id => withKids || (id !== "adrian" && id !== "alixia")).map(id => ({ id, items: rows[id].sort((x, y) => (x.status === "added") - (y.status === "added") || (x.a ?? 9999) - (y.a ?? 9999)) })).filter(r => r.items.length);
       const n = list.reduce((s, r) => s + r.items.filter(x => x.status !== "same" && !x.cause).length, 0);
       diffs += n;
-      days.push({ k, name: WD[parse(k).getDay()], custody, estimated: custodyEstimated(k), rows: list, diffs: n });
+      days.push({ k, name: WD[parse(k).getDay()], custody, estimated: custodyEstimated(k), rows: list, diffs: n, conflicts });
     }
     return { days, diffs };
   }
 
   const chip = it => {
     const tm = it.a !== undefined && it.b !== undefined ? ` <span class="tm">${Sched.T(it.a)}–${Sched.T(it.b)}</span>` : it.a !== undefined ? ` <span class="tm">${Sched.T(it.a)}</span>` : "";
-    return `<span class="wchip ${it.status}">${esc(it.label)}${tm}${it.why ? ` <span class="why">(${esc(it.why)})</span>` : ""}</span>`;
+    return `<span class="wchip ${it.status}${it.conflict ? " conflict" : ""}">${it.conflict ? "⚠ " : ""}${esc(it.label)}${tm}${it.why ? ` <span class="why">(${esc(it.why)})</span>` : ""}</span>`;
   };
   const CUSTODY = { moi: "Enfants chez moi", autre: "Enfants chez l'autre parent", echange: "Jour d'échange" };
 
@@ -67,7 +76,7 @@ const WeekView = (() => {
       .map(r => ({ ...r, items: r.items.filter(x => (!onlyDiff || x.status !== "same") && (!compact || r.id === "moi" || x.status !== "same" || x.kind) ) })).filter(r => r.items.length);
     const body = rows.map(r => `<div class="prow"><span class="pn"><i style="background:${r.id === "famille" ? "var(--muted)" : personColor(r.id)}"></i>${esc(short(r.id))}</span><span class="chips">${r.items.map(chip).join("")}</span></div>`).join("");
     const head = title || `${d.name} ${fmt(parse(d.k)).replace(/^[^ ]+ /, "")}`;
-    return `<section class="wday${d.diffs ? " has-diff" : ""}"><header class="whd"><b>${esc(head)}</b>${d.custody ? `<span class="cb ${d.custody}">${esc(CUSTODY[d.custody])}${d.estimated ? " (estimé)" : ""}</span>` : ""}${d.diffs ? `<span class="nd">${d.diffs} différence${d.diffs > 1 ? "s" : ""}</span>` : ""}</header>${body || `<p class="muted none">${onlyDiff ? "Conforme à la semaine type." : "Rien de prévu."}</p>`}</section>`;
+    return `<section class="wday${d.diffs ? " has-diff" : ""}"><header class="whd"><b>${esc(head)}</b>${d.custody ? `<span class="cb ${d.custody}">${esc(CUSTODY[d.custody])}${d.estimated ? " (estimé)" : ""}</span>` : ""}${d.conflicts ? `<span class="nd">⚠ ${d.conflicts} conflit${d.conflicts > 1 ? "s" : ""}</span>` : ""}${d.diffs ? `<span class="nd">${d.diffs} différence${d.diffs > 1 ? "s" : ""}</span>` : ""}</header>${body || `<p class="muted none">${onlyDiff ? "Conforme à la semaine type." : "Rien de prévu."}</p>`}</section>`;
   }
 
   // HTML de la semaine : une carte par jour.

@@ -3,6 +3,7 @@
 // Sources des jours fériés et congés (champ `src` de chaque entrée « ferie ») : affichées dans la page Vacances pour pouvoir les vérifier.
 // Les deux arrêtés ci-dessous listent les « congés divers » (jours fériés, 27 septembre) de l'année scolaire ; celui de 2028-2029 paraîtra
 // vers juillet 2027 : d'ici là les dates de cette année-là sont CALCULÉES (Pâques) et à confirmer.
+// Carnaval : deux semaines pour les élèves (primaire et secondaire, confirmé par la famille) ; les arrêtés cités ne parlent que du personnel des CPMS (une semaine).
 window.HOLIDAY_SOURCES = {
   a2627: { label: "Arrêté du Gouvernement de la Communauté française du 5 décembre 2025 (M.B. 18/12/2025), année 2026-2027", url: "https://gallilex.cfwb.be/sites/default/files/textes-normatifs/2025-12/53828_0000.pdf" },
   a2728: { label: "Arrêté du Gouvernement de la Communauté française du 3 juillet 2026 (M.B. 15/07/2026), année 2027-2028", url: "https://gallilex.cfwb.be/sites/default/files/textes-normatifs/2026-07/54084_0000.pdf" },

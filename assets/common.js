@@ -197,6 +197,15 @@ function eveningFreeFrom(dow) {
   return Math.ceil(t / 5) * 5;
 }
 
+// Dernière sortie à deux : enregistrement « outing », événement de sortie (outing) déjà passé, ou ancienne tâche « Sorties » terminée.
+const OUTING_GOAL_DAYS = 21;
+function lastOuting(list) {
+  let l = list; if (!l) { try { l = JSON.parse(localStorage.getItem("family-tasks-v1") || "[]") || []; } catch (e) { l = []; } }
+  const today = iso(new Date());
+  const days = [...l.filter(r => r && r.kind === "outing").map(r => r.date), ...l.filter(r => r && r.kind === "event" && r.outing && r.date <= today).map(r => r.date),
+    ...l.filter(r => r && !r.kind && r.cat === "Sorties" && r.done && r.doneAt).map(r => iso(new Date(r.doneAt)))].filter(Boolean).sort();
+  return days.length ? days.pop() : null;
+}
 // Fenêtres pour sortir avec Émilie dans les `horizon` prochains jours : semaines où A² est chez l'autre parent
 // (soirées et week-end libres) et périodes de stage/garde organisée (journées libres).
 function outingWindows(today, horizon) {
@@ -405,13 +414,13 @@ function renderStatus() {
   el.innerHTML = healthMessages().map(m => `<p class="alert ${m.lvl === "bad" ? "" : "warn"}" role="status">${esc(m.text)}</p>`).join("");
 }
 
-// Barre d'onglets en bas de l'écran (au pouce) : Planning, Tâches, Vacances. « Semaine type » est un lien secondaire (depuis la vue Semaine) ;
+// Barre d'onglets en bas de l'écran (au pouce) : Planning, Tâches, Sorties, Vacances. « Semaine type » est un lien secondaire (depuis la vue Semaine) ;
 // le bouton ＋ propose d'ajouter un événement ou une tâche depuis n'importe quelle page.
 function nav(active) {
   if (active === "s") active = "p"; // la semaine type dépend du Planning
   const n = lateCount(), link = (href, id, label) => `<a href="${href}" class="${active === id ? "on" : ""}"${active === id ? ' aria-current="page"' : ""}>${label}</a>`;
   document.body.insertAdjacentHTML("beforeend",
-    `<nav class="tabs" aria-label="Pages">${link("index.html", "p", "Planning")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}<span class="sr"> en retard</span></span>` : ""}`)}${link("vacances.html", "v", "Vacances")}<button type="button" id="fabBtn" class="plus" aria-label="Ajouter un événement ou une tâche" aria-expanded="false">＋</button></nav>
+    `<nav class="tabs" aria-label="Pages">${link("index.html", "p", "Planning")}${link("taches.html", "t", `Tâches${n ? ` <span class="badge" title="${n} en retard">${n}<span class="sr"> en retard</span></span>` : ""}`)}${link("sorties.html", "o", "Sorties")}${link("vacances.html", "v", "Vacances")}<button type="button" id="fabBtn" class="plus" aria-label="Ajouter un événement ou une tâche" aria-expanded="false">＋</button></nav>
     <div class="fabmenu" id="fabMenu" hidden><a href="index.html#new-event">＋ Événement</a><a href="taches.html#new-task">＋ Tâche</a></div>`);
   const menu = document.getElementById("fabMenu"), btn = document.getElementById("fabBtn");
   btn.onclick = () => { menu.hidden = !menu.hidden; btn.setAttribute("aria-expanded", String(!menu.hidden)); };

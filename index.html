@@ -197,6 +197,9 @@ function renderHome() {
   const alerts = [];
   if (late.length) alerts.push(["bad", `<a href="taches.html">⚠ ${late.length} tâche${late.length > 1 ? "s" : ""} en retard</a> : ${list(late)}`]);
   if (soon.length) alerts.push(["warn", `<a href="taches.html">${soon.length} tâche${soon.length > 1 ? "s" : ""} à faire d'ici 3 jours</a> : ${list(soon)}`]);
+  // Sorties à deux : rappel quand la dernière date de plus de 3 semaines (seulement si une sortie a déjà été notée)
+  const lastOut = lastOuting(Records.local());
+  if (lastOut) { const dOut = Math.round((parse(today) - parse(lastOut)) / MS); if (dOut > OUTING_GOAL_DAYS) alerts.push(["warn", `<a href="sorties.html">Dernière sortie à deux : il y a ${dOut < 14 ? dOut + " jours" : Math.floor(dOut / 7) + " semaines"}</a> : voir les occasions`]); }
   if (undated.length) alerts.push(["warn", `<a href="taches.html">${undated.length} tâche${undated.length > 1 ? "s" : ""} sans date</a> : ${list(undated)}`]);
   childcareGaps().filter(g => g.end >= today && g.start <= addDays(today, 14)).forEach(g => alerts.push(["bad", `<a href="taches.html">Garde d'Adrian et Alixia à organiser</a> ${range(g.start, g.end)} (${esc(g.holiday.replace(/ \(.*\)/, ""))})`]));
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today && a.start <= addDays(today, 30)).forEach(a => alerts.push(["bad", `<a href="taches.html">Qui garde Lana ?</a> ${range(a.start, a.end)}`]));

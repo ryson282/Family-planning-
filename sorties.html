@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#4f6bed">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<title>Sorties à deux</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header><h1>Sorties avec Émilie</h1></header>
+<main>
+  <section class="card">
+    <p id="lastOut" class="wsum" style="margin:0 0 8px"></p>
+    <div class="dacts"><button type="button" id="outDone" class="primary">On est sortis aujourd'hui</button></div>
+    <details class="dact"><summary>Noter une autre date</summary>
+      <div class="dacts"><label class="dlgrow" style="margin:0">Date de la sortie<input type="date" id="outDate"></label><button type="button" id="outOther">Noter</button></div>
+    </details>
+    <p class="muted" id="outFlash" aria-live="polite" style="margin:6px 0 0"></p>
+  </section>
+  <section class="card">
+    <h2 style="margin-top:0;font-size:1.1rem">Occasions</h2>
+    <p class="muted" style="margin-top:0">Les soirs où vous êtes libres : Adrian et Alixia chez l'autre parent, ou occupés par un stage ou une garde organisée. L'heure indiquée tient compte des activités d'Émilie, du retour de Bruxelles, de la piscine et de la récupération de Louanne.</p>
+    <ul class="list" id="slots"></ul>
+    <div class="more" id="slotsMore"></div>
+  </section>
+  <section class="card" id="plannedBox" hidden>
+    <h2 style="margin-top:0;font-size:1.1rem">Déjà prévues</h2>
+    <ul class="list" id="planned"></ul>
+  </section>
+</main>
+<dialog id="dlg">
+  <form id="dlgForm" method="dialog">
+    <h3 style="margin-top:0">Planifier une sortie</h3>
+    <div class="two"><label class="dlgrow"><span>Date</span><input type="date" id="sDate" required></label><label class="dlgrow"><span>Heure</span><input type="time" id="sTime"></label></div>
+    <label class="dlgrow"><span>Où, quoi (facultatif)</span><input id="sNote" autocomplete="off" maxlength="120" placeholder="Restaurant, cinéma…"></label>
+    <div class="dlgbtns"><button type="button" id="sCancel">Annuler</button><button class="primary">Ajouter au planning</button></div>
+  </form>
+</dialog>
+<script src="data/school-holidays.js"></script>
+<script src="data/school-holidays-auto.js"></script>
+<script src="data/people.js"></script>
+<script src="data/absences.js"></script>
+<script src="data/custody.js"></script>
+<script src="data/childcare.js"></script>
+<script src="data/school-events.js"></script>
+<script src="data/schedules.js"></script>
+<script src="data/calendar.js"></script>
+<script src="data/calendar-filters.js"></script>
+<script src="assets/common.js"></script>
+<script src="data/sync-config.js"></script>
+<script src="assets/tasks-sync.js"></script>
+<script src="assets/records.js"></script>
+<script>
+nav("o");
+Records.apply();
+const today = () => iso(new Date());
+const range = (a, b) => (a === b ? fmt(parse(a)) : `du ${fmt(parse(a))} au ${fmt(parse(b))}`);
+const clock = m => `${Math.floor(m / 60)} h${m % 60 ? " " + String(m % 60).padStart(2, "0") : ""}`;
+const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const wd = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
+const planned = () => Records.of("event").filter(r => r.outing).sort((a, b) => a.date.localeCompare(b.date));
+
+// Dernière sortie et objectif d'une sortie toutes les 3 semaines
+function renderLast() {
+  const el = document.getElementById("lastOut"), last = lastOuting(Records.local()), t = today();
+  if (!last) { el.className = "wsum"; el.textContent = "Aucune sortie à deux notée pour l'instant."; return; }
+  const days = Math.round((parse(t) - parse(last)) / MS), weeks = Math.floor(days / 7);
+  el.textContent = days === 0 ? "Dernière sortie : aujourd'hui ✓" : `Dernière sortie : il y a ${days < 14 ? days + " jours" : weeks + " semaines"}${days > OUTING_GOAL_DAYS ? " — objectif : une sortie toutes les 3 semaines" : ""}`;
+  el.className = "wsum " + (days > OUTING_GOAL_DAYS ? "bad" : "ok");
+}
+
+// Créneaux : un jour par ligne, avec l'heure à partir de laquelle vous êtes libres
+function slots() {
+  const t = today(), taken = new Set(planned().map(r => r.date)), rows = [];
+  outingWindows(t, 120).slice(0, 10).forEach(w => {
+    if (w.kind !== "absents") { rows.push({ date: w.start, label: `${range(w.start, w.end)} : Adrian et Alixia occupés (${w.note || "garde organisée"}), journées libres`, time: "" }); return; }
+    for (let k = w.start; k <= w.end && rows.length < 40; k = addDays(k, 1)) {
+      const d = parse(k).getDay();
+      if (d === 6 || d === 0) { rows.push({ date: k, label: `${wd[d]} ${fmt(parse(k)).replace(/^[^ ]+ /, "")} : libres toute la journée`, time: "19:30" }); continue; }
+      const m = eveningFreeFrom(d);
+      if (m <= 21 * 60 + 30) rows.push({ date: k, label: `${wd[d]} ${fmt(parse(k)).replace(/^[^ ]+ /, "")} : libres dès ${clock(m)}`, time: hhmm(Math.max(m + 30, 19 * 60 + 30)) });
+    }
+  });
+  return rows.filter(r => !taken.has(r.date));
+}
+function render() {
+  renderLast();
+  const s = slots();
+  // Les 6 prochaines occasions ; les suivantes sont repliées
+  const li = (x, i) => `<li class="item"><span class="t">${esc(x.label)}</span><button data-slot="${i}" class="mini">Planifier</button></li>`;
+  document.getElementById("slots").innerHTML = s.length ? s.slice(0, 6).map(li).join("") : `<li class="muted">Aucune occasion dans les 4 prochains mois (Adrian et Alixia sont chez vous).</li>`;
+  document.getElementById("slotsMore").innerHTML = s.length > 6 ? `<details><summary>${s.length - 6} autres occasions</summary><ul class="list">${s.slice(6).map((x, i) => li(x, i + 6)).join("")}</ul></details>` : "";
+  window._slots = s;
+  const p = planned().filter(r => r.date >= today());
+  document.getElementById("plannedBox").hidden = !p.length;
+  document.getElementById("planned").innerHTML = p.map(r => `<li class="item"><span class="t">${esc(fmt(parse(r.date)))}${r.time ? " à " + esc(r.time.replace(":", " h ")) : ""}${r.note ? `<small class="note">${esc(r.note)}</small>` : ""}</span><button class="mini" data-del="${esc(r.id)}" aria-label="Supprimer cette sortie">Supprimer</button></li>`).join("");
+}
+const flash = t => { document.getElementById("outFlash").textContent = t; };
+async function noteOuting(date) {
+  await Records.put({ id: Records.newId("g"), kind: "outing", date });
+  flash(`Sortie du ${fmt(parse(date))} notée ✓`); render();
+}
+document.getElementById("outDone").onclick = () => noteOuting(today());
+document.getElementById("outOther").onclick = () => { const d = document.getElementById("outDate").value; if (!d) return flash("Choisissez une date."); if (d > today()) return flash("Pour une sortie à venir, utilisez « Planifier »."); noteOuting(d); };
+document.getElementById("outDate").max = today();
+// Planifier : devient un événement du planning (Yves et Émilie), pas une tâche
+const dlg = document.getElementById("dlg");
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.slot !== undefined) { const x = window._slots[b.dataset.slot]; document.getElementById("sDate").value = x.date; document.getElementById("sTime").value = x.time; document.getElementById("sNote").value = ""; dlg.showModal(); }
+  if (b.dataset.del) { const r = planned().find(x => String(x.id) === b.dataset.del); if (r && confirm(`Supprimer la sortie du ${fmt(parse(r.date))} ?`)) { await Records.remove(r.id); render(); } }
+});
+document.getElementById("sCancel").onclick = () => dlg.close();
+document.getElementById("dlgForm").onsubmit = async e => {
+  e.preventDefault();
+  const date = document.getElementById("sDate").value, time = document.getElementById("sTime").value, note = document.getElementById("sNote").value.trim();
+  if (!date) return;
+  dlg.close();
+  await Records.put({ id: Records.newId("e"), kind: "event", outing: true, title: "Sortie avec Émilie", date, end: "", time, timeEnd: "", person: "moi,emilie", note, house: false, sitter: "", noschool: false, remind: "1" });
+  flash(`Sortie du ${fmt(parse(date))} ajoutée au planning ✓`); render();
+};
+render();
+Records.refresh().then(changed => { if (changed) render(); });
+Records.watch(() => render());
+</script>
+</body>
+</html>

@@ -93,9 +93,9 @@ function houseEmptyOn(day) {
 // Jours fériés et congés isolés (Armistice, lundi de Pâques, « Congé : Mardi gras » des événements scolaires...).
 function daysOff() {
   const seen = new Set(), out = [];
-  const push = (date, name) => { if (!seen.has(date)) { seen.add(date); out.push({ date, name }); } };
+  const push = (date, name, src) => { if (!seen.has(date)) { seen.add(date); out.push({ date, name, src }); } };
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "ferie").forEach(h => {
-    for (let k = h.start; k <= h.end; k = addDays(k, 1)) push(k, h.name);
+    for (let k = h.start; k <= h.end; k = addDays(k, 1)) push(k, h.name, h.src);
   });
   (window.SCHOOL_EVENTS || []).filter(e => /^Congé : /.test(e.title)).forEach(e => push(e.date, e.title.replace(/^Congé : /, "")));
   return out;

@@ -52,6 +52,7 @@ for (let i = 1; i < hs.length; i++) if (hs[i].start < hs[i - 1].start && hs[i].t
   const iso = d => d.toISOString().slice(0, 10), plus = (d, n) => new Date(d.getTime() + n * 864e5);
   const rentrees = hs.filter(h => h.type === "rentree"), first = rentrees.length ? rentrees[0].start : "", last = (rentrees.filter(h => /^Fin/.test(h.name)).pop() || {}).start || "";
   const vac = hs.filter(h => h.type === "vacances");
+  hs.filter(h => h.type === "ferie").forEach(h => { if (!(W.HOLIDAY_SOURCES || {})[h.src]) warn("data/school-holidays.js", `${h.name} (${h.start}) : source manquante ou inconnue (champ src)`); else if (h.src === "calc") warn("data/school-holidays.js", `${h.name} (${h.start}) : date calculée, à confirmer quand l'arrêté sera publié`); });
   for (let y = +first.slice(0, 4); first && y <= +last.slice(0, 4); y++) {
     const e = easter(y);
     [["Lundi de Pâques", iso(plus(e, 1))], ["Fête du Travail", `${y}-05-01`], ["Ascension", iso(plus(e, 39))], ["Lundi de Pentecôte", iso(plus(e, 50))], ["Fête de la Communauté française", `${y}-09-27`], ["Armistice", `${y}-11-11`]].forEach(([n, d]) => {

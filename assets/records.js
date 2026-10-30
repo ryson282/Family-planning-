@@ -5,6 +5,7 @@
 //   "childcare"  solution de garde organisée pendant un congé : { start, end, solution, status: "confirmé" | "à confirmer", note }
 //   "house"      garde de Lana quand la maison est vide : { start, end, sitter, note }
 //   "holiday"    décision pour un congé : { key, year, status: "decide" | "part" | "reste", dest, dates, lodging, transport, budget, note }
+//   "event"      événement saisi dans le site : { title, date, end, time, timeEnd, person, note }
 //   "deadline"   échéance propre au foyer (assurance auto, carte d'identité...) : { title, date, every, lead, who, cat, note }
 // Les pages qui en dépendent appellent Records.apply() avant de se dessiner, puis Records.refresh() pour se mettre à jour.
 const Records = (() => {
@@ -24,6 +25,7 @@ const Records = (() => {
     window.HOUSE_EMPTY = [...base.house.filter(b => !hr.some(r => r.start === b.start && r.end === b.end)), ...hr.map(r => ({ start: r.start, end: r.end, sitter: r.sitter || "", note: r.note || "", record: r.id }))];
     window.HOLIDAY_DECISIONS = Object.fromEntries(of("holiday", list).map(r => [`${r.key}:${r.year}`, r]));
     window.HOUSEHOLD_DEADLINES = of("deadline", list);
+    window.USER_EVENTS = of("event", list).filter(r => r.title && r.date);
     return list;
   }
   // Ajoute ou remplace un enregistrement : mémoire locale, puis envoi (si la synchronisation est configurée).

@@ -16,6 +16,7 @@
     <div id="homeAlerts" role="status"></div>
     <div id="homeToday"></div>
     <div id="homeTomorrow"></div>
+    <div class="dacts"><button id="addEv" class="mini">＋ Ajouter un événement</button></div>
     <details open class="ahead"><summary><b>À anticiper</b></summary><ul class="list" id="homeAhead"></ul></details>
   </section>
   <section class="card">
@@ -106,14 +107,30 @@ function dayDetail(k) {
   if (cc) rows.push(`<li><span class="t">🧒 Garde de A² en congé : ${esc(cc.solution || "à organiser")}</span>${catTag("Garde")}</li>`);
   if (he) rows.push(`<li><span class="t">🐱 Maison vide : Lana ${he.sitter ? "gardée par " + esc(he.sitter) : "sans solution de garde"}</span>${catTag("Maison")}</li>`);
   events.filter(e => visible(e) && inRange(k, e.date, e.end) && !CONGE_EVENT.test(e.title)).forEach(e =>
-    rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : e.source ? ` <span class="muted">· ${esc(calendarLabel(e.source))}</span>` : ""}</span></li>`));
+    rows.push(`<li><span class="t"><i class="dot" style="background:${personColor(e.person)}"></i>${e.time ? esc(e.time) + (e.timeEnd ? "–" + esc(e.timeEnd) : "") + " " : ""}${esc(e.title)}${e.person ? ` <span class="muted">· ${esc(personName(e.person))}</span>` : e.rec ? ` <span class="muted">· Famille</span>` : e.source ? ` <span class="muted">· ${esc(calendarLabel(e.source))}</span>` : ""}${e.note ? `<small class="note">${esc(e.note)}</small>` : ""}</span>${e.rec ? `<span class="dacts"><button class="mini" data-evedit="${esc(e.rec)}">Modifier</button><button class="mini" data-evdel="${esc(e.rec)}" aria-label="Supprimer ${esc(e.title)}">Supprimer</button></span>` : ""}</li>`));
   return rows.length ? rows.join("") : `<li class="muted">Rien de particulier ce jour-là.</li>`;
 }
 
 // Modifier la garde d'un jour (échange exceptionnel, changement de dernière minute) ou signaler un enfant malade : enregistré dans l'application, partagé entre appareils.
+// Événements saisis dans le site (rendez-vous, sorties, déplacements) : enregistrés comme les tâches, partagés entre appareils.
+let editing = null; // enregistrement en cours de modification, {} pour un nouvel événement
+function eventForm(k) {
+  const r = editing || {}, picked = String(r.person || "").split(",").filter(Boolean);
+  const boxes = PEOPLE.map(p => `<label class="check"><input type="checkbox" name="person" value="${esc(p.id)}"${picked.includes(p.id) ? " checked" : ""}> ${esc(p.name.replace(/ \(.*\)/, ""))}</label>`).join("");
+  return `<details class="dact" id="evBox"${editing ? " open" : ""}><summary>${r.id ? "Modifier l'événement" : "＋ Ajouter un événement ce jour"}</summary>
+    <form id="evForm" class="holform" autocomplete="off">
+      <label class="dlgrow">Titre<input name="title" required maxlength="120" value="${esc(r.title || "")}" placeholder="Ex. Dentiste, Spectacle, Voyage"></label>
+      <div class="two"><label class="dlgrow">Date<input type="date" name="date" required value="${esc(r.date || k)}"></label><label class="dlgrow">Jusqu'au (facultatif)<input type="date" name="end" value="${esc(r.end && r.end !== r.date ? r.end : "")}"></label></div>
+      <div class="two"><label class="dlgrow">Heure (facultatif)<input type="time" name="time" value="${esc(r.time || "")}"></label><label class="dlgrow">Fin (facultatif)<input type="time" name="timeEnd" value="${esc(r.timeEnd || "")}"></label></div>
+      <fieldset class="checks"><legend class="muted">Qui est concerné ? (personne cochée = toute la famille)</legend>${boxes}</fieldset>
+      <label class="dlgrow">Note<input name="note" maxlength="200" value="${esc(r.note || "")}"></label>
+      <div class="dacts"><button class="primary">Enregistrer</button>${editing ? `<button type="button" data-evcancel="1">Annuler</button>` : ""}</div>
+      <p class="muted" id="evFlash" aria-live="polite"></p>
+    </form></details>`;
+}
 function dayActions(k) {
   const cur = (window.CUSTODY_OVERRIDES || {})[k], kids = ["alixia", "adrian", "lukas"].map(i => `<option value="${i}">${esc(personName(i))}</option>`).join("");
-  return `<details class="dact"><summary>Modifier la garde ce jour…</summary>
+  return eventForm(k) + `<details class="dact"><summary>Modifier la garde ce jour…</summary>
     <div class="dacts"><button data-ov="moi">Enfants chez moi</button><button data-ov="autre">Chez l'autre parent</button><button data-ov="echange">Jour d'échange</button>${cur ? `<button data-ov="">Rétablir le rythme habituel</button>` : ""}</div>
     <label class="dlgrow">Jusqu'au (facultatif : plusieurs jours)<input type="date" id="ovTo" min="${k}"></label>
     <div class="dacts"><select id="sickWho" aria-label="Enfant">${kids}</select><button data-sick="1">Enfant malade ou école fermée : créer la tâche</button></div>
@@ -244,6 +261,7 @@ document.getElementById("wToday").onclick = () => { weekStart = WeekView.mondayO
 document.getElementById("onlyDiff").onchange = renderWeek;
 document.getElementById("toWeek").onclick = () => { weekStart = WeekView.mondayOf(selDay); setView("week"); window.scrollTo({ top: 0 }); };
 
+document.getElementById("addEv").onclick = () => { selDay = todayIso(); cur = new Date(); cur.setDate(1); editing = {}; setView("month"); render(); const f = document.getElementById("evBox"); if (f) f.scrollIntoView({ block: "center" }); };
 document.getElementById("prev").onclick = () => goMonth(-1);
 document.getElementById("next").onclick = () => goMonth(1);
 document.getElementById("today").onclick = () => { cur = new Date(); cur.setDate(1); selDay = todayIso(); render(); };
@@ -251,8 +269,27 @@ document.getElementById("detail").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.ov !== undefined) applyOverride(b.dataset.ov);
   if (b.dataset.sick) sickTask();
+  if (b.dataset.evedit) { editing = Records.of("event").find(r => String(r.id) === b.dataset.evedit) || null; render(); const f = document.getElementById("evBox"); if (f) f.scrollIntoView({ block: "center" }); }
+  if (b.dataset.evcancel) { editing = null; render(); }
+  if (b.dataset.evdel) { const r = Records.of("event").find(x => String(x.id) === b.dataset.evdel); if (r && confirm(`Supprimer « ${r.title} » ?`)) refreshAll(Records.remove(r.id)); }
 });
-const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.dataset.d; render(); const f = document.querySelector(".day.sel"); if (f) f.focus({ preventScroll: true }); } };
+document.getElementById("detail").addEventListener("submit", e => {
+  if (e.target.id !== "evForm") return;
+  e.preventDefault();
+  const f = new FormData(e.target), v = n => (f.get(n) || "").toString().trim();
+  const rec = { id: editing && editing.id ? editing.id : Records.newId("e"), kind: "event", title: v("title"), date: v("date"), end: v("end"), time: v("time"), timeEnd: v("timeEnd"), person: f.getAll("person").join(","), note: v("note") };
+  const flash = t => { document.getElementById("evFlash").textContent = t; };
+  if (!rec.title || !rec.date) return flash("Titre et date obligatoires.");
+  if (rec.end && rec.end < rec.date) return flash("La date de fin précède le début.");
+  if (rec.timeEnd && !rec.time) return flash("Indiquez l'heure de début avant l'heure de fin.");
+  if (rec.time && rec.timeEnd && rec.timeEnd <= rec.time && (!rec.end || rec.end === rec.date)) return flash("L'heure de fin doit suivre l'heure de début.");
+  editing = null; selDay = rec.date; cur = new Date(parse(selDay)); cur.setDate(1);
+  refreshAll(Records.put(rec));
+});
+async function refreshAll(done) {
+  await done; recompute(); render(); upcoming(); renderHome(); if (!document.getElementById("weekView").hidden) renderWeek();
+}
+const pick = e => { const c = e.target.closest(".day"); if (c) { selDay = c.dataset.d; editing = null; render(); const f = document.querySelector(".day.sel"); if (f) f.focus({ preventScroll: true }); } };
 document.getElementById("grid").addEventListener("click", pick);
 document.getElementById("grid").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
 render(); upcoming(); renderHome();

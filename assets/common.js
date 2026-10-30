@@ -287,6 +287,8 @@ function allEvents() {
       person: named ? named.person : (window.CALENDAR_OWNERS || {})[e.calendar], time: e.allDay ? "" : e.start.slice(11, 16),
       timeEnd: !e.allDay && end.slice(0, 10) === e.start.slice(0, 10) ? end.slice(11, 16) : "" });
   });
+  // Événements saisis dans le site (assets/records.js) : le champ person liste les personnes concernées (vide = toute la famille).
+  (window.USER_EVENTS || []).forEach(r => out.push({ date: r.date, end: r.end && r.end >= r.date ? r.end : r.date, title: r.title, source: "Site", person: r.person || "", time: r.time || "", timeEnd: r.time && r.timeEnd && (!r.end || r.end === r.date) ? r.timeEnd : "", note: r.note || "", rec: r.id }));
   (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.end || e.date, title: e.title, source: "École", person: e.person, time: e.time || "", timeEnd: "", todo: e.todo, amount: e.amount, needsParent: e.needsParent, note: e.note }));
   return out;
 }

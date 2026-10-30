@@ -42,6 +42,13 @@ run(`allEvents()`).filter(e => e.source === "École" && e.end >= today && e.date
   events.push(vevent({ uid: `ecole-${e.date}-${e.title}`.replace(/[^\w-]+/g, "_"), date: e.date, end: e.end, time: e.time || undefined, timeEnd: e.time ? e.timeEnd || undefined : undefined, summary, description: [e.todo, e.amount, e.note].filter(Boolean).join(" — "), alarms }));
 });
 
+// 3 bis. Événements saisis dans le site (rendez-vous, sorties, déplacements) : alarme 1 h avant, ou la veille à 18 h pour une journée entière
+run(`allEvents()`).filter(e => e.rec && e.end >= today && e.date <= limit).forEach(e => {
+  const who = names(e.person), summary = e.title + (who ? ` (${who})` : "");
+  const alarms = [e.time ? alarmBefore(60, summary) : alarmAllDay(1, 18, `Demain : ${summary}`)];
+  events.push(vevent({ uid: `site-${e.rec}`, date: e.date, end: e.end, time: e.time || undefined, timeEnd: e.time ? e.timeEnd || undefined : undefined, summary, description: e.note, alarms, transparent: !e.time }));
+});
+
 // 4. Tâches avec échéance (non terminées, non écartées) ; celles en retard se représentent chaque jour jusqu'à ce qu'elles soient faites
 const tasks = stored.filter(t => !t.kind && !t.done && !t.dismissed && t.due);
 tasks.forEach(t => {

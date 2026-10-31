@@ -174,3 +174,8 @@ nav.tabs .plus{position:sticky;right:0;flex:0 0 52px;box-shadow:-8px 0 8px -4px 
 .best .t{flex:1 1 200px}
 .occrow .t{display:flex;flex-direction:column;gap:2px}.occrow .top{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .occrow.gard .t{opacity:.95}
+
+/* Rangée avec des boutons sous le texte (détail d'un jour, listes d'événements) : la ligne passe à la ligne et le texte garde une vraie largeur
+   (sans cela, la ligne de boutons à 100 % écrasait le texte à 0 px : un caractère par ligne) */
+ul.list li:has(> .dacts){flex-wrap:wrap}
+ul.list li:has(> .dacts) > .t{flex:1 1 220px;min-width:0}

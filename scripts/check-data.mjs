@@ -159,6 +159,12 @@ try {
   const off = P.process([el(8, { tourism: "hotel", name: "Hôtel Bel Air" })], { lat: 50.6, lon: 3.4, cc: "lu" }, { month: 10, noCamp: true, radius: 8, now: new Date("2026-11-01"),
     official: [{ name: "Hotel Bel-Air", cat: "sleep", type: "hotel", lat: 50.6001, lon: 3.4001, website: "https://bel.example", phone: "+352 1", street: "", mod: 0, src: "Test" }, { name: "Camping Z", cat: "sleep", type: "camp_site", lat: 50.6, lon: 3.4, website: "", phone: "", mod: 0, src: "Test" }, { name: "3_Étape jeu de piste", cat: "see", type: "attraction", lat: 50.6, lon: 3.4, mod: 0, src: "Test" }] });
   if (off.official.matched !== 1 || off.official.added !== 0 || off.sleep.top.length + off.sleep.others.length !== 1 || !off.sleep.top[0].official) err("assets/places.js", "fusion avec la base officielle fausse (fiche confirmée, camping et bruit écartés)");
+  // Programme : un jour d'arrivée à 10 h et de départ à 17 h contient un déjeuner et au moins une visite ; une cascade ne finit jamais après le coucher du soleil
+  const pl = (id, name, type, cat, la) => ({ id, name, type, cat, lat: la, lon: 3.4, score: 60, warn: [], website: "https://x.example", trust: { level: "conf" } });
+  const day = P.plan([{ date: "2026-11-11", arrive: "10:00", leave: "17:00", sunrise: 7 * 60 + 40, sunset: 16 * 60 + 58, rainy: false }], { see: [pl("a", "Cascade", "waterfall", "see", 50.601), pl("b", "Musée", "museum", "see", 50.602)], eat: [pl("r", "Resto", "restaurant", "eat", 50.601)], sleep: [] }, { lat: 50.6, lon: 3.4 }, null)[0];
+  const kinds = day.items.map(i => i.kind);
+  if (!kinds.includes("meal") || !kinds.includes("visit") || kinds[kinds.length - 1] !== "leave") err("assets/places.js", `programme : étapes inattendues (${kinds.join(",")})`);
+  day.items.filter(i => i.kind === "visit" && P.OUTDOOR.test(i.p.type)).forEach(i => { if (i.end > 16 * 60 + 28) err("assets/places.js", "programme : visite en plein air après le coucher du soleil"); });
   if (P.seasonClosed("Apr-Oct: Mo-Su 10:00-18:00", 10) !== true || P.seasonClosed("Mo-Su 10:00-18:00", 10) !== false) err("assets/places.js", "horaire saisonnier mal reconnu");
 } catch (e) { err("assets/places.js", `exception : ${e.message}`); }
 

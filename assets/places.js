@@ -5,7 +5,8 @@
 // toujours « à confirmer ». Chaque lieu garde sa source (fiche OpenStreetMap) et un badge de confiance calculé par règle.
 (function (g) {
   const HOME = { lat: 50.696, lon: 5.255, name: "Waremme" };           // point de départ (centre de la ville, pas l'adresse)
-  const MIRRORS = ["https://overpass.openstreetmap.fr/api/interpreter", "https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+  // Serveurs Overpass publics. overpass.openstreetmap.fr répond « white-listed usages only » aux requêtes de navigateur (en-tête Origin) : il passe en dernier.
+  const MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.openstreetmap.fr/api/interpreter"];
   const TTL = 7 * 86400000;
   const CATS = { sleep: "Où dormir", see: "À voir, à faire", eat: "Où manger" };
 
@@ -49,17 +50,35 @@
   async function fetchPlaces(lat, lon, r, camp, onTry) {
     const key = `ovp:v1:${lat.toFixed(3)}:${lon.toFixed(3)}:${r}:${camp ? 1 : 0}`, hit = store.get(key);
     if (hit && Date.now() - hit.ts < TTL && Array.isArray(hit.elements)) return { elements: hit.elements, ts: hit.ts, cached: true, mirror: hit.mirror };
-    const q = buildQuery(lat, lon, r, camp); let last;
-    for (const m of MIRRORS) {
+    const q = buildQuery(lat, lon, r, camp), fails = [];
+    // Essais en cascade : un serveur qui échoue laisse tout de suite la place au suivant ; un serveur qui tarde (6 s) est doublé par le suivant ; le premier qui répond gagne.
+    const ctls = []; let done = false;
+    const one = async m => {
       if (onTry) onTry(m);
+      const ctl = new AbortController(); ctls.push(ctl); const t = timeout(25000, ctl);
       try {
-        const d = await getJson(m, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(q) }, 14000);
-        if (!d || !Array.isArray(d.elements)) throw new Error("réponse vide");
-        const rec = { ts: Date.now(), mirror: new URL(m).hostname, elements: d.elements }; store.set(key, rec);
-        return { elements: d.elements, ts: rec.ts, cached: false, mirror: rec.mirror };
-      } catch (e) { last = e; }
-    }
-    throw last || new Error("aucun serveur n'a répondu");
+        const res = await fetch(m, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(q), signal: ctl.signal });
+        const txt = await res.text(); let d; try { d = JSON.parse(txt); } catch (e) { throw new Error(res.ok ? "réponse illisible (" + txt.slice(0, 40).replace(/\s+/g, " ") + ")" : "HTTP " + res.status); }
+        if (!res.ok || !d || !Array.isArray(d.elements)) throw new Error(res.ok ? "réponse vide" : "HTTP " + res.status);
+        return { m, d };
+      } catch (e) { if (!done) fails.push(`${new URL(m).hostname} : ${e.name === "AbortError" ? "trop long" : e.message}`); throw e; } finally { clearTimeout(t); }
+    };
+    try {
+      const { m, d } = await new Promise((resolve, reject) => {
+        let i = 0, pending = 0;
+        const next = () => {
+          if (done) return;
+          if (i >= MIRRORS.length) { if (!pending) { done = true; reject(new Error("aucun serveur")); } return; }
+          const m = MIRRORS[i++]; pending++; let settled = false;
+          one(m).then(v => { if (done) return; done = true; resolve(v); }, () => { settled = true; pending--; next(); });
+          setTimeout(() => { if (!settled && !done) next(); }, 6000);
+        };
+        next();
+      });
+      ctls.forEach(c => c.abort());
+      const rec = { ts: Date.now(), mirror: new URL(m).hostname, elements: d.elements }; store.set(key, rec);
+      return { elements: d.elements, ts: rec.ts, cached: false, mirror: rec.mirror };
+    } catch (e) { done = true; const err = new Error("aucun serveur n'a répondu"); err.details = fails; throw err; }
   }
   // Temps de route en voiture (OSRM public) ; à défaut une estimation à vol d'oiseau × 1,35 à 65 km/h, signalée comme telle
   async function drive(a, b) {
@@ -218,5 +237,56 @@
     maps: (name, city) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + (city ? " " + city : ""))}`,
     mapsNear: (what, lat, lon) => `https://www.google.com/maps/search/${encodeURIComponent(what)}/@${lat},${lon},14z`
   };
-  g.Places = { geocodeFuzzy, official, officialLu, mergeOfficial, HOME, CATS, TYPE_FR, MIRRORS, norm, km, safeUrl, domain, geocode, buildQuery, fetchPlaces, drive, weather, sun, classify, seasonClosed, trust, normalize, dedupe, score, pick, process, why, links };
+  // ---- Programme : jour par jour, à partir des horaires du séjour, du soleil, de la météo et des lieux proposés ----------------------------------------
+  // Les durées de visite sont des ESTIMATIONS par type de lieu (pas des données) : toujours affichées avec « ~ ». Les trajets entre lieux sont estimés à vol d'oiseau × 1,35 à 45 km/h.
+  // Aucune ouverture n'est supposée : chaque étape reste « à confirmer ».
+  const DUR = { museum: 90, gallery: 60, attraction: 60, viewpoint: 30, waterfall: 60, peak: 60, nature: 120, zoo: 180, theme_park: 240, aquarium: 120, "historic:castle": 75, "historic:monument": 30, "historic:ruins": 45, "historic:fort": 75, "historic:archaeological_site": 45 };
+  const OUTDOOR = /^(waterfall|viewpoint|peak|nature|historic:ruins|historic:archaeological_site)$/;
+  const hm = t => { const m = /^(\d{1,2}):(\d\d)$/.exec(t || ""); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const hop = (a, b) => Math.max(5, Math.round(km(a, b) * 1.35 / 45 * 60 / 5) * 5);
+  // days : [{ date, arrive, leave, sunrise (min), sunset (min), rainy }] ; pools : { see, eat, sleep } (listes ordonnées : lieux gardés d'abord) ; home : point de départ du premier jour
+  function plan(days, pools, home, hotel) {
+    const used = new Set(), out = []; let pos = home;
+    const take = (list, ok) => { // le mieux placé : score élevé, proche de la position actuelle
+      let best = null, bs = -1e9;
+      list.forEach((p, i) => { if (used.has(p.id)) return; const r = ok(p); if (!r) return; const sc = (p.kept ? 40 : 0) + p.score - 2.2 * (km(pos, p) * 1.35) - i * 0.4 + (r.bonus || 0); if (sc > bs) { bs = sc; best = { p, r }; } });
+      return best;
+    };
+    days.forEach((day, di) => {
+      const first = di === 0, last = di === days.length - 1, items = [];
+      let t = hm(day.arrive) ?? (first ? 10 * 60 : 9 * 60 + 30), end = last ? (hm(day.leave) ?? 17 * 60) : 21 * 60 + 30;
+      if (!first) pos = hotel || pos;
+      items.push({ kind: first ? "arrive" : "morning", t });
+      let lunch = false, dinner = false, guard = 0;
+      while (t < end && guard++ < 12) {
+        const wantLunch = !lunch && t <= 13 * 60 + 30 && end >= 14 * 60, wantDinner = !dinner && end >= 20 * 60 + 30 && t <= 20 * 60;
+        const nextMeal = wantLunch ? Math.max(12 * 60 + 15, t) : wantDinner ? Math.max(19 * 60, t) : Infinity;
+        const free = Math.min(nextMeal, end) - t;
+        // visite si assez de temps avant le prochain repas ; sinon le repas
+        if (free >= 45) {
+          const pick = take(pools.see, p => {
+            const d = DUR[p.type] || 60, tr = hop(pos, p), s0 = t + tr, e0 = s0 + d; if (e0 > Math.min(nextMeal, end) + 10) return null;
+            const out0 = OUTDOOR.test(p.type); if (out0 && day.sunset != null && e0 > day.sunset - 30) return null; if (out0 && day.sunrise != null && s0 < day.sunrise) return null;
+            return { d, tr, bonus: day.rainy ? (out0 ? -25 : 15) : 0 };
+          });
+          if (pick) { const { p, r } = pick, s0 = t + r.tr; used.add(p.id); items.push({ kind: "visit", p, travel: r.tr, t: s0, end: s0 + r.d, est: true }); t = s0 + r.d; pos = p; continue; }
+          if (nextMeal === Infinity) { items.push({ kind: "free", t, end: Math.min(end, t + free) }); t = end; break; }
+        }
+        if (nextMeal !== Infinity) {
+          if (t < nextMeal) { if (nextMeal - t >= 30) items.push({ kind: "free", t, end: nextMeal }); t = nextMeal; }
+          const pick = take(pools.eat, () => ({})), tr = pick ? hop(pos, pick.p) : 0;
+          if (wantLunch) lunch = true; else dinner = true;
+          if (pick) { used.add(pick.p.id); items.push({ kind: "meal", meal: wantLunch ? "Déjeuner" : "Dîner", p: pick.p, travel: tr, t: t + tr, end: t + tr + 75, est: true }); t += tr + 75; pos = pick.p; }
+          else { items.push({ kind: "meal", meal: wantLunch ? "Déjeuner" : "Dîner", p: null, t, end: t + 75 }); t += 75; }
+          continue;
+        }
+        break;
+      }
+      if (last) items.push({ kind: "leave", t: Math.max(t, end - 0) }); else items.push({ kind: "night", p: hotel || null });
+      out.push({ date: day.date, items, sunrise: day.sunrise, sunset: day.sunset, rainy: !!day.rainy, first, last });
+    });
+    return out;
+  }
+  g.Places = { plan, hhmm, hm, DUR, OUTDOOR, geocodeFuzzy, official, officialLu, mergeOfficial, HOME, CATS, TYPE_FR, MIRRORS, norm, km, safeUrl, domain, geocode, buildQuery, fetchPlaces, drive, weather, sun, classify, seasonClosed, trust, normalize, dedupe, score, pick, process, why, links };
 })(typeof window !== "undefined" ? window : globalThis);

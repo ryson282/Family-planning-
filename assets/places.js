@@ -62,6 +62,25 @@
     } catch (e) {}
     const k = km(a, b) * 1.35; return { min: Math.round(k / 65 * 60), km: Math.round(k), est: true };
   }
+  // Base officielle Tourisme Wallonie (CC BY 4.0, sans clé) : hôtels, chambres d'hôtes, restaurants, découvertes autour d'un point. Échec = liste vide (couche facultative).
+  const WAL = "https://geoservices.wallonie.be/arcgis/rest/services/TOURISME/OFFRES_TOURISTIQUES/MapServer";
+  const WAL_LAYERS = [[1, "sleep", "hotel"], [13, "sleep", "guest_house"], [8, "eat", "restaurant"], [10, "see", "attraction"]];
+  async function official(lat, lon, r) {
+    const key = `wal:v1:${lat.toFixed(3)}:${lon.toFixed(3)}:${r}`, hit = store.get(key); if (hit && Date.now() - hit.ts < TTL) return hit.list;
+    const res = await Promise.all(WAL_LAYERS.map(async ([layer, cat, type]) => {
+      try {
+        const d = await getJson(`${WAL}/${layer}/query?geometry=${lon},${lat}&geometryType=esriGeometryPoint&inSR=4326&distance=${Math.round(r * 1000)}&units=esriSRUnit_Meter&spatialRel=esriSpatialRelIntersects&outFields=NOM,RUE,NUMERO,CODE_POSTAL,COMMUNE,PHONE1,SITE_WEB,DATE_MODIFICATION&returnGeometry=true&outSR=4326&resultRecordCount=500&f=json`, {}, 12000);
+        return (d.features || []).filter(f => f.attributes && f.attributes.NOM && f.geometry && isFinite(f.geometry.x) && isFinite(f.geometry.y)).map(f => { const a = f.attributes; return { name: String(a.NOM).trim(), cat, type, lat: f.geometry.y, lon: f.geometry.x, website: safeUrl(a.SITE_WEB), phone: a.PHONE1 || "",
+          src: "Tourisme Wallonie", lic: "CC BY 4.0", street: [a.RUE && (a.RUE + (a.NUMERO ? " " + a.NUMERO : "")), [a.CODE_POSTAL, a.COMMUNE].filter(Boolean).join(" ")].filter(Boolean).join(", "), mod: a.DATE_MODIFICATION || 0 }; });
+      } catch (e) { return []; }
+    }));
+    const list = res.flat(); if (list.length) store.set(key, { ts: Date.now(), list }); return list;
+  }
+  // Base officielle du Luxembourg (Luxembourg for Tourism, CC BY) : fichier réduit data/lu-poi.json (scripts/build-lu-poi.mjs), chargé seulement pour une destination au Luxembourg
+  async function officialLu(lat, lon, r) {
+    const d = await getJson("data/lu-poi.json", {}, 15000), src = d.src || "Luxembourg for Tourism";
+    return (d.list || []).map(x => ({ name: x.n, cat: x.c, type: x.t, lat: x.la, lon: x.lo, website: safeUrl(x.w), phone: x.p, street: x.a, desc: x.d, mod: 0, src, lic: d.license, updated: d.updated })).filter(o => km({ lat, lon }, o) <= r);
+  }
   async function weather(lat, lon, start, end) {
     const d = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum&timezone=auto&start_date=${start}&end_date=${end}`, {}, 8000);
     const x = d && d.daily; if (!x || !x.time) throw new Error("pas de prévision");
@@ -142,7 +161,7 @@
   }
   // Score 0-100, chaque terme visible : proximité 35, notoriété 25, complétude 20, saison 20. Ce n'est pas une note de qualité : il mesure surtout ce qui est connu.
   function score(p, rMax) {
-    const fields = [p.hours, p.website, p.phone, p.street].filter(Boolean).length, noto = Math.min(1, (p.wiki ? 0.6 : 0) + (p.website ? 0.2 : 0) + (p.heritage || /attraction|viewpoint|waterfall|museum/.test(p.type) ? 0.2 : 0));
+    const fields = [p.hours, p.website, p.phone, p.street].filter(Boolean).length, noto = Math.min(1, (p.wiki ? 0.6 : 0) + (p.website ? 0.2 : 0) + (p.heritage || /attraction|viewpoint|waterfall|museum/.test(p.type) ? 0.2 : 0) + (p.official ? 0.3 : 0));
     const t = { proximite: Math.round(35 * Math.max(0, 1 - p.km / rMax)), notoriete: Math.round(25 * noto), completude: Math.round(20 * fields / 4), saison: p.warn.some(w => /saisonnier/.test(w)) ? 0 : 20 };
     p.terms = t; p.score = t.proximite + t.notoriete + t.completude + t.saison; return p;
   }
@@ -155,10 +174,26 @@
     const ids = new Set(top.map(p => p.id));
     return { top, others: list.filter(p => !ids.has(p.id)).sort((a, b) => b.score - a.score) };
   }
+  // Base officielle : une fiche proche et de nom voisin d'un lieu OpenStreetMap le confirme (site, téléphone) ; sinon elle s'ajoute, sauf le bruit (étapes de jeu de piste, parkings, magasins de vélos)
+  const NOISE = /^\d+_|\btest\b|^parking\b|^cycles?\b|^location (de )?v[ée]los?/i;
+  function mergeOfficial(ok, list, anchor, opt) {
+    const old = Date.UTC(2024, 0, 1); let matched = 0, added = 0;
+    for (const o of list) {
+      const src = o.src || "Tourisme Wallonie";
+      if (NOISE.test(o.name) || (o.type === "camp_site" && opt.noCamp)) continue;
+      const m = ok.find(p => p.cat === o.cat && km(p, o) < 0.25 && (norm(p.name) === norm(o.name) || norm(p.name).includes(norm(o.name)) || norm(o.name).includes(norm(p.name))));
+      const stale = o.mod && o.mod < old;
+      if (m) { m.official = { src, mod: o.mod, lic: o.lic || "CC BY 4.0" }; if (o.desc && !m.desc) m.desc = o.desc; if (!m.website && o.website) m.website = o.website; if (!m.phone && o.phone) m.phone = o.phone; if (!m.street && o.street) m.street = o.street; m.trust = m.trust.level === "non" ? { level: "conf", why: `référencé par ${src}` } : m.trust; matched++; continue; }
+      const p = { id: `w${Math.round(o.lat * 1e5)}_${Math.round(o.lon * 1e5)}_${norm(o.name).slice(0, 12).replace(/ /g, "")}`, osm: "", name: o.name, cat: o.cat, type: o.type, lat: o.lat, lon: o.lon, tags: {}, warn: stale ? [`fiche officielle non mise à jour depuis ${new Date(o.mod).getFullYear()} : à confirmer`] : [],
+        website: o.website, phone: o.phone, hours: "", street: o.street, cuisine: "", stars: "", wiki: false, heritage: false, desc: o.desc || "", official: { src, mod: o.mod, lic: o.lic || "CC BY 4.0" } };
+      p.km = km(anchor, p); p.trust = { level: "conf", why: `référencé par ${src}${o.mod ? ", fiche du " + new Date(o.mod).toLocaleDateString("fr-BE") : o.updated ? ", base du " + o.updated : ""}` }; if (p.km <= (opt.radius || 8)) { ok.push(p); added++; }
+    }
+    return { matched, added, listed: list.length };
+  }
   function process(elements, anchor, opt) {
     opt = { now: new Date(), ...opt }; const drops = {}, ok = [];
     for (const el of elements) { const p = normalize(el, anchor, opt); if (p.drop) drops[p.drop] = (drops[p.drop] || 0) + 1; else ok.push(p); }
-    const all = dedupe(ok).map(p => score(p, opt.radius || 8)), res = { drops, total: all.length };
+    const offIn = mergeOfficial(ok, opt.official || [], anchor, opt), all = dedupe(ok).map(p => score(p, opt.radius || 8)), res = { drops, total: all.length, official: offIn };
     for (const c of Object.keys(CATS)) res[c] = pick(all.filter(p => p.cat === c), opt.top || 6);
     return res;
   }
@@ -176,5 +211,5 @@
     maps: (name, city) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + (city ? " " + city : ""))}`,
     mapsNear: (what, lat, lon) => `https://www.google.com/maps/search/${encodeURIComponent(what)}/@${lat},${lon},14z`
   };
-  g.Places = { HOME, CATS, TYPE_FR, MIRRORS, norm, km, safeUrl, domain, geocode, buildQuery, fetchPlaces, drive, weather, sun, classify, seasonClosed, trust, normalize, dedupe, score, pick, process, why, links };
+  g.Places = { official, officialLu, mergeOfficial, HOME, CATS, TYPE_FR, MIRRORS, norm, km, safeUrl, domain, geocode, buildQuery, fetchPlaces, drive, weather, sun, classify, seasonClosed, trust, normalize, dedupe, score, pick, process, why, links };
 })(typeof window !== "undefined" ? window : globalThis);

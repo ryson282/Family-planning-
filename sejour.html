@@ -44,7 +44,7 @@
       <p class="muted" style="margin-top:0">Ce site ne connaît ni les prix, ni les chambres libres, ni les avis. Ces pages s'ouvrent déjà remplies avec vos dates (2 adultes) :</p>
       <div class="dacts" id="deep"></div>
     </section>
-    <p class="muted" id="credit">Lieux : © contributeurs OpenStreetMap (ODbL). Classement automatique, à vérifier : il mesure ce qui est connu, pas l'intérêt pour vous.</p>
+    <p class="muted" id="credit">Lieux : © contributeurs OpenStreetMap (ODbL) ; fiches « Officiel » : Tourisme Wallonie (CC BY 4.0) et Luxembourg for Tourism (CC BY). Classement automatique, à vérifier : il mesure ce qui est connu, pas l'intérêt pour vous.</p>
   </section>
 </main>
 <script src="data/school-holidays.js"></script>
@@ -87,7 +87,7 @@ function placeLinks(p, city) {
   const l = [];
   if (p.website) l.push(`<a href="${esc(p.website)}" target="_blank" rel="noopener">Site</a>`);
   const tel = p.phone && String(p.phone).replace(/[^\d+]/g, ""); if (tel && tel.length > 5) l.push(`<a href="tel:${esc(tel)}">${esc(p.phone)}</a>`);
-  l.push(`<a href="${esc(P.links.maps(p.name, city))}" target="_blank" rel="noopener">Maps</a>`, `<a href="${esc(p.osm)}" target="_blank" rel="noopener" title="Fiche source OpenStreetMap">OSM</a>`);
+  l.push(`<a href="${esc(P.links.maps(p.name, city))}" target="_blank" rel="noopener">Maps</a>`); if (p.osm) l.push(`<a href="${esc(p.osm)}" target="_blank" rel="noopener" title="Fiche source OpenStreetMap">OSM</a>`);
   return `<span class="plinks">${l.join(" ")}</span>`;
 }
 function hoursLine(p, s) {
@@ -102,7 +102,7 @@ function placeHtml(p, s, kept) {
   const tp = esc(P.TYPE_FR[p.type] || p.type);
   const btns = kept ? `<span class="dacts"><button class="mini" data-confirm="${esc(p.id)}" aria-pressed="${!!s.confirmed[p.id]}">${s.confirmed[p.id] ? "Confirmé ✓" : "J'ai confirmé"}</button><button class="mini" data-unkeep="${esc(p.id)}">Retirer</button></span>`
     : `<span class="dacts"><button class="mini" data-keep="${esc(p.id)}" aria-label="Garder ${esc(p.name)}">Garder</button><button class="mini" data-drop="${esc(p.id)}" aria-label="Écarter ${esc(p.name)}">Écarter</button></span>`;
-  return `<li class="item place"><span class="t"><b>${esc(p.name)}</b> <small>${tp}</small> ${trustHtml(p, s)}<span class="occ-note">${esc(P.why(p, p.min))}</span>${hoursLine(p, s)}${warn}${placeLinks(p, s.dest.name)}${kept ? "" : t}</span>${btns}</li>`;
+  return `<li class="item place"><span class="t"><b>${esc(p.name)}</b> <small>${tp}</small> ${trustHtml(p, s)}${p.official ? ` <span class="trust trust-ok" title="${esc(p.official.src)} (${esc(p.official.lic || "CC BY")})${p.official.mod ? ", fiche du " + new Date(p.official.mod).toLocaleDateString("fr-BE") : ""}">Officiel</span>` : ""}<span class="occ-note">${esc(P.why(p, p.min))}</span>${p.desc ? `<small class="note">${esc(p.desc)}${p.desc.length >= 160 ? "…" : ""} (${esc(p.official.src)})</small>` : ""}${hoursLine(p, s)}${warn}${placeLinks(p, s.dest.name)}${kept ? "" : t}</span>${btns}</li>`;
 }
 function renderResult() {
   const s = cur; if (!s) return; $("out").hidden = false;
@@ -148,11 +148,13 @@ async function search(s) {
   P.drive(P.HOME, d).then(route => { if (my !== run) return; ctxExtra.route = route; renderCtx(ctxExtra); });
   wx.then(w => { if (my !== run) return; ctxExtra.weather = w; renderCtx(ctxExtra); });
   try {
+    const offP = d.cc === "be" ? P.official(d.lat, d.lon, s.radius) : d.cc === "lu" ? P.officialLu(d.lat, d.lon, s.radius).catch(() => []) : Promise.resolve([]);
     const r = await P.fetchPlaces(d.lat, d.lon, s.radius, !noCamp, m => status(`Recherche des lieux… (serveur : ${new URL(m).hostname})`));
+    const off = await offP;
     if (my !== run) return;
-    result = P.process(r.elements, anchor, { month, noCamp, radius: s.radius, now: new Date(), top: 6 });
-    const n = result.total, ex = Object.entries(result.drops).filter(([k]) => k !== "autre").map(([k, v]) => `${v} ${k}`).join(", ");
-    status(`${n} lieux trouvés dans OpenStreetMap${r.cached ? " (copie du " + new Date(r.ts).toLocaleDateString("fr-BE") + ")" : ""}${ex ? " · écartés : " + ex : ""}. Source : fiches OpenStreetMap, à confirmer avant de réserver.`);
+    result = P.process(r.elements, anchor, { month, noCamp, radius: s.radius, now: new Date(), top: 6, official: off });
+    const n = result.total, offTxt = d.cc === "be" || d.cc === "lu" ? ` · base officielle ${d.cc === "lu" ? "Luxembourg for Tourism" : "Tourisme Wallonie"} : ${result.official.matched} lieux confirmés, ${result.official.added} ajoutés` : "", ex = Object.entries(result.drops).filter(([k]) => k !== "autre").map(([k, v]) => `${v} ${k}`).join(", ");
+    status(`${n} lieux trouvés dans OpenStreetMap${r.cached ? " (copie du " + new Date(r.ts).toLocaleDateString("fr-BE") + ")" : ""}${ex ? " · écartés : " + ex : ""}. Source : fiches OpenStreetMap, à confirmer avant de réserver.${offTxt}`);
     renderResult();
   } catch (e) { if (my === run) status("Impossible de joindre les serveurs de lieux (OpenStreetMap). Réessayez dans un moment ; les liens Booking et Maps ci-dessous fonctionnent quand même."); }
 }

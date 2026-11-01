@@ -156,6 +156,9 @@ try {
   if (res.sleep.top.length !== 1) err("assets/places.js", `hébergements : 1 attendu (doublon, fermé, camping, internat écartés), ${res.sleep.top.length} obtenus`);
   if (res.see.top.length + res.see.others.length) err("assets/places.js", "une borne frontière ne doit pas être proposée comme lieu à voir");
   if (!res.eat.top.length || res.eat.top[0].trust.level === "ok") err("assets/places.js", "restaurant : confiance « vérifié » impossible sans date de contrôle");
+  const off = P.process([el(8, { tourism: "hotel", name: "Hôtel Bel Air" })], { lat: 50.6, lon: 3.4, cc: "lu" }, { month: 10, noCamp: true, radius: 8, now: new Date("2026-11-01"),
+    official: [{ name: "Hotel Bel-Air", cat: "sleep", type: "hotel", lat: 50.6001, lon: 3.4001, website: "https://bel.example", phone: "+352 1", street: "", mod: 0, src: "Test" }, { name: "Camping Z", cat: "sleep", type: "camp_site", lat: 50.6, lon: 3.4, website: "", phone: "", mod: 0, src: "Test" }, { name: "3_Étape jeu de piste", cat: "see", type: "attraction", lat: 50.6, lon: 3.4, mod: 0, src: "Test" }] });
+  if (off.official.matched !== 1 || off.official.added !== 0 || off.sleep.top.length + off.sleep.others.length !== 1 || !off.sleep.top[0].official) err("assets/places.js", "fusion avec la base officielle fausse (fiche confirmée, camping et bruit écartés)");
   if (P.seasonClosed("Apr-Oct: Mo-Su 10:00-18:00", 10) !== true || P.seasonClosed("Mo-Su 10:00-18:00", 10) !== false) err("assets/places.js", "horaire saisonnier mal reconnu");
 } catch (e) { err("assets/places.js", `exception : ${e.message}`); }
 

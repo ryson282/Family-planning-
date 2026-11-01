@@ -206,6 +206,13 @@ function renderHome() {
   }
   if (undated.length) alerts.push(["warn", `<a href="taches.html">${undated.length} tâche${undated.length > 1 ? "s" : ""} sans date</a> : ${list(undated)}`]);
   childcareGaps().filter(g => g.end >= today && g.start <= addDays(today, 14)).forEach(g => alerts.push(["bad", `<a href="taches.html">Garde d'Adrian et Alixia à organiser</a> ${range(g.start, g.end)} (${esc(g.holiday.replace(/ \(.*\)/, ""))})`]));
+  // Séjours préparés sur ce téléphone : hébergement à choisir, puis vérification de la veille
+  localSejours().filter(s => s.end >= today && s.start <= addDays(today, 21)).forEach(s => {
+    const nm = esc(s.dest.name), until = Math.round((parse(s.start) - parse(today)) / MS);
+    if (!s.kept.some(p => p.cat === "sleep")) alerts.push(["warn", `<a href="sejour.html?id=${esc(s.id)}">Séjour à ${nm} ${until > 0 ? "dans " + until + " jour" + (until > 1 ? "s" : "") : "en cours"} : hébergement pas encore choisi</a>`]);
+    const todo = s.kept.filter(p => !(s.confirmed || {})[p.id]);
+    if (until <= 2 && until >= 0 && todo.length) alerts.push(["bad", `<a href="sejour.html?id=${esc(s.id)}">Séjour à ${nm} ${until === 0 ? "aujourd'hui" : until === 1 ? "demain" : "après-demain"} : re-vérifier horaires et ouverture</a> (${todo.length} lieu${todo.length > 1 ? "x" : ""} à confirmer)`]);
+  });
   (window.HOUSE_EMPTY || []).filter(a => !a.sitter && a.end >= today && a.start <= addDays(today, 30)).forEach(a => alerts.push(["bad", `<a href="taches.html">Qui garde Lana ?</a> ${range(a.start, a.end)}`]));
   (window.SCHOOL_HOLIDAYS || []).filter(h => h.type === "vacances" && h.end >= today && h.start <= addDays(today, 42)).forEach(h => {
     let est = false; for (let k = h.start > today ? h.start : today; k <= h.end; k = addDays(k, 1)) if (custodyEstimated(k)) est = true;

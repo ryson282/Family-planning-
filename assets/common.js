@@ -310,6 +310,13 @@ function personFromTitle(title) {
 }
 
 // Tous les événements ponctuels, normalisés : { date (début), end, title, source, person, time, timeEnd }
+// Séjours préparés sur ce téléphone (sejour.html) : gardés en local seulement (clé sejours-v1), lus avec prudence.
+function localSejours() {
+  try {
+    const a = JSON.parse(localStorage.getItem("sejours-v1"));
+    return Array.isArray(a) ? a.filter(s => s && s.dest && typeof s.dest.name === "string" && /^\d{4}-\d\d-\d\d$/.test(s.start || "") && /^\d{4}-\d\d-\d\d$/.test(s.end || "") && s.end >= s.start && Array.isArray(s.kept)) : [];
+  } catch (e) { return []; }
+}
 function allEvents() {
   const out = [];
   (window.CALENDAR_EVENTS || []).filter(e => calendarAllows(e) && !isCustodyEvent(e) && !isHidden(e)).forEach(e => {
@@ -320,6 +327,7 @@ function allEvents() {
   });
   // Événements saisis dans le site (assets/records.js) : le champ person liste les personnes concernées (vide = toute la famille).
   (window.USER_EVENTS || []).forEach(r => out.push({ date: r.date, end: r.end && r.end >= r.date ? r.end : r.date, title: r.title, source: "Site", person: r.person || "", time: r.time || "", timeEnd: r.time && r.timeEnd && (!r.end || r.end === r.date) ? r.timeEnd : "", note: r.note || "", endTime: r.time && r.timeEnd ? r.timeEnd : "", rec: r.id, outing: !!r.outing }));
+  localSejours().forEach(s => out.push({ date: s.start, end: s.end, title: `Séjour : ${s.dest.name}`, source: "Séjour", person: "moi,emilie", time: "", timeEnd: "" }));
   (window.SCHOOL_EVENTS || []).forEach(e => out.push({ date: e.date, end: e.end || e.date, title: e.title, source: "École", person: e.person, time: e.time || "", timeEnd: "", todo: e.todo, amount: e.amount, needsParent: e.needsParent, note: e.note }));
   return out;
 }

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#4f6bed">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<title>Séjour</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header><h1>Séjour</h1></header>
+<main>
+  <section class="card" id="listBox" hidden>
+    <h2 style="margin-top:0;font-size:1.1rem">Mes séjours</h2>
+    <p class="muted" style="margin-top:0">Gardés sur ce téléphone seulement (pas envoyés aux autres appareils).</p>
+    <ul class="list" id="sejours"></ul>
+  </section>
+  <section class="card">
+    <h2 style="margin-top:0;font-size:1.1rem" id="formTitle">Nouveau séjour</h2>
+    <form id="form" autocomplete="off">
+      <label class="dlgrow"><span>Destination (n'importe quel lieu)</span><input id="fDest" required maxlength="80" placeholder="Tournai, Müllerthal, Ninglinspo, Bruges…" enterkeyhint="search"></label>
+      <div class="two"><label class="dlgrow"><span>Arrivée</span><input type="date" id="fStart" required></label><label class="dlgrow"><span>Départ</span><input type="date" id="fEnd" required></label></div>
+      <label class="dlgrow"><span>Rayon de recherche autour du lieu</span><select id="fRadius"><option value="5">5 km (ville)</option><option value="8" selected>8 km</option><option value="15">15 km (région)</option></select></label>
+      <div class="dacts"><button class="primary" id="fGo">Chercher des lieux</button></div>
+      <p class="muted" id="fErr" role="alert" aria-live="polite"></p>
+    </form>
+  </section>
+  <section id="out" hidden>
+    <section class="card" id="ctxBox">
+      <h2 style="margin-top:0;font-size:1.1rem" id="ctxTitle"></h2>
+      <div id="ctx"></div>
+    </section>
+    <section class="card" id="keptBox" hidden>
+      <h2 style="margin-top:0;font-size:1.1rem">Mon séjour</h2>
+      <p class="muted" style="margin-top:0">Appelez ou ouvrez le site officiel, puis touchez « J'ai confirmé ». Rappel : re-vérifier horaires et ouverture la veille du départ.</p>
+      <ul class="list" id="kept"></ul>
+    </section>
+    <section class="card" id="status" hidden><p class="muted" id="statusTxt" aria-live="polite" style="margin:0"></p></section>
+    <div id="cats"></div>
+    <section class="card">
+      <h2 style="margin-top:0;font-size:1.1rem">Prix et disponibilités</h2>
+      <p class="muted" style="margin-top:0">Ce site ne connaît ni les prix, ni les chambres libres, ni les avis. Ces pages s'ouvrent déjà remplies avec vos dates (2 adultes) :</p>
+      <div class="dacts" id="deep"></div>
+    </section>
+    <p class="muted" id="credit">Lieux : © contributeurs OpenStreetMap (ODbL) ; fiches « Officiel » : Tourisme Wallonie (CC BY 4.0) et Luxembourg for Tourism (CC BY). Classement automatique, à vérifier : il mesure ce qui est connu, pas l'intérêt pour vous.</p>
+  </section>
+</main>
+<script src="data/school-holidays.js"></script>
+<script src="data/school-holidays-auto.js"></script>
+<script src="data/people.js"></script>
+<script src="data/absences.js"></script>
+<script src="data/custody.js"></script>
+<script src="data/childcare.js"></script>
+<script src="data/school-events.js"></script>
+<script src="data/schedules.js"></script>
+<script src="data/calendar.js"></script>
+<script src="data/calendar-filters.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/places.js"></script>
+<script>
+nav("o");
+const $ = id => document.getElementById(id), P = window.Places;
+const KEY = "sejours-v1";
+const load = () => { try { const a = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+let sejours = load(), cur = null, run = 0, result = null;
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(sejours)); return true; } catch (e) { return false; } };
+const dm = k => fmt(parse(k)).replace(/^[^ ]+ /, "");
+const WD = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
+const dayLong = k => `${WD[parse(k).getDay()]} ${dm(k)}`;
+const clockTime = d => d.toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" }).replace(":", " h ");
+const range = s => s.start === s.end ? dayLong(s.start) : `${dayLong(s.start)} au ${dayLong(s.end)}`;
+const ferieIn = (a, b) => { for (let k = a; k <= b; k = addDays(k, 1)) { const h = (window.SCHOOL_HOLIDAYS || []).find(x => x.type === "ferie" && inRange(k, x.start, x.end)); if (h) return { date: k, name: h.name || "jour férié" }; } return null; };
+
+// ---- Liste des séjours ----------------------------------------------------------------
+function renderList() {
+  const t = iso(new Date());
+  $("listBox").hidden = !sejours.length;
+  $("sejours").innerHTML = sejours.slice().sort((a, b) => a.start.localeCompare(b.start)).map(s => `<li class="item"><span class="t"><b>${esc(s.dest.name)}</b>${s.end < t ? " (passé)" : ""}<small class="note">${esc(range(s))} · ${s.kept.length} lieu${s.kept.length > 1 ? "x" : ""} gardé${s.kept.length > 1 ? "s" : ""}</small></span><span class="dacts"><button class="mini" data-open="${esc(s.id)}">Ouvrir</button><button class="mini" data-delsej="${esc(s.id)}" aria-label="Supprimer le séjour ${esc(s.dest.name)}">Supprimer</button></span></li>`).join("");
+}
+
+// ---- Résultat -------------------------------------------------------------------------
+const trustHtml = (p, s) => { const c = s.confirmed[p.id]; if (c) return `<span class="trust trust-ok">Confirmé par vous le ${esc(dm(c))}</span>`;
+  return `<span class="trust trust-${p.trust.level}" title="${esc(p.trust.why)}">${{ ok: "Vérifié", conf: "Source ouverte à confirmer", non: "Non vérifié" }[p.trust.level]}</span>`; };
+function placeLinks(p, city) {
+  const l = [];
+  if (p.website) l.push(`<a href="${esc(p.website)}" target="_blank" rel="noopener">Site</a>`);
+  const tel = p.phone && String(p.phone).replace(/[^\d+]/g, ""); if (tel && tel.length > 5) l.push(`<a href="tel:${esc(tel)}">${esc(p.phone)}</a>`);
+  l.push(`<a href="${esc(P.links.maps(p.name, city))}" target="_blank" rel="noopener">Maps</a>`); if (p.osm) l.push(`<a href="${esc(p.osm)}" target="_blank" rel="noopener" title="Fiche source OpenStreetMap">OSM</a>`);
+  return `<span class="plinks">${l.join(" ")}</span>`;
+}
+function hoursLine(p, s) {
+  const f = ferieIn(s.start, s.end), be = s.dest.cc === "be";
+  const day = f && be ? `jour férié en Belgique le ${dm(f.date)}` : "";
+  const raw = p.hours ? `selon OpenStreetMap : « ${esc(p.hours.length > 70 ? p.hours.slice(0, 70) + "…" : p.hours)} »` : "horaires inconnus";
+  return `<small class="note">${raw} · à confirmer${day ? " (" + esc(day) + ")" : ""}</small>`;
+}
+function placeHtml(p, s, kept) {
+  const warn = p.warn.length ? `<small class="note warn">${p.warn.map(esc).join(" · ")}</small>` : "";
+  const t = p.terms ? `<details class="dact"><summary>Pourquoi ce lieu ?</summary><p class="muted">${esc(P.why(p))}. Score ${p.score}/100 : proximité ${p.terms.proximite}/35, notoriété ${p.terms.notoriete}/25, informations ${p.terms.completude}/20, saison ${p.terms.saison}/20. Confiance : ${esc(p.trust.why)}.</p></details>` : "";
+  const tp = esc(P.TYPE_FR[p.type] || p.type);
+  const btns = kept ? `<span class="dacts"><button class="mini" data-confirm="${esc(p.id)}" aria-pressed="${!!s.confirmed[p.id]}">${s.confirmed[p.id] ? "Confirmé ✓" : "J'ai confirmé"}</button><button class="mini" data-unkeep="${esc(p.id)}">Retirer</button></span>`
+    : `<span class="dacts"><button class="mini" data-keep="${esc(p.id)}" aria-label="Garder ${esc(p.name)}">Garder</button><button class="mini" data-drop="${esc(p.id)}" aria-label="Écarter ${esc(p.name)}">Écarter</button></span>`;
+  return `<li class="item place"><span class="t"><b>${esc(p.name)}</b> <small>${tp}</small> ${trustHtml(p, s)}${p.official ? ` <span class="trust trust-ok" title="${esc(p.official.src)} (${esc(p.official.lic || "CC BY")})${p.official.mod ? ", fiche du " + new Date(p.official.mod).toLocaleDateString("fr-BE") : ""}">Officiel</span>` : ""}<span class="occ-note">${esc(P.why(p, p.min))}</span>${p.desc ? `<small class="note">${esc(p.desc)}${p.desc.length >= 160 ? "…" : ""} (${esc(p.official.src)})</small>` : ""}${hoursLine(p, s)}${warn}${placeLinks(p, s.dest.name)}${kept ? "" : t}</span>${btns}</li>`;
+}
+function renderResult() {
+  const s = cur; if (!s) return; $("out").hidden = false;
+  const drop = new Set(s.dropped), keep = new Set(s.kept.map(p => p.id));
+  $("keptBox").hidden = !s.kept.length;
+  $("kept").innerHTML = s.kept.map(p => placeHtml(p, s, true)).join("");
+  if (!result) { $("cats").innerHTML = ""; return; }
+  $("cats").innerHTML = Object.entries(P.CATS).map(([c, label]) => {
+    const r = result[c], cut = p => !drop.has(p.id) && !keep.has(p.id);
+    // un lieu écarté est remplacé par le suivant du classement
+    const top = r.top.filter(cut), spare = r.others.filter(p => cut(p) && !top.includes(p) && (!p.warn.length)).slice(0, 6 - top.length);
+    const shown = [...top, ...spare], rest = r.others.filter(p => cut(p) && !shown.includes(p));
+    const hint = c === "sleep" ? `<p class="muted" style="margin-top:0">Pas de prix ni de chambres libres ici : voir « Prix et disponibilités » plus bas. Campings exclus de novembre à mars.</p>` : "";
+    return `<section class="card"><h2 style="margin-top:0;font-size:1.1rem">${label}</h2>${hint}<ul class="list">${shown.length ? shown.map(p => placeHtml(p, s)).join("") : `<li class="muted">Aucun lieu bien renseigné trouvé.</li>`}</ul>` +
+      (rest.length ? `<details class="dact"><summary>${rest.length} autre${rest.length > 1 ? "s" : ""} (peu renseignés, à confirmer)</summary><ul class="list">${rest.slice(0, 25).map(p => placeHtml(p, s)).join("")}</ul></details>` : "") + `</section>`;
+  }).join("");
+}
+function renderCtx(extra) {
+  const s = cur, d = s.dest, parts = [];
+  parts.push(`<p style="margin:0 0 6px"><b>${esc(range(s))}</b> · ${esc(d.label.split(",").slice(0, 3).join(","))} <a href="${esc(d.osm || "#")}" target="_blank" rel="noopener">OSM</a></p>`);
+  if (extra.route) parts.push(`<p style="margin:0 0 6px">De ${esc(P.HOME.name)} : <b>${extra.route.min >= 60 ? Math.floor(extra.route.min / 60) + " h " + String(extra.route.min % 60).padStart(2, "0") : extra.route.min + " min"}</b> en voiture, ${extra.route.km} km${extra.route.est ? " (estimation à vol d'oiseau)" : ""}.</p>`);
+  const sun = P.sun(s.start, d.lat, d.lon);
+  if (sun) parts.push(`<p style="margin:0 0 6px">Le ${esc(dm(s.start))} : lever ${clockTime(sun.rise)}, coucher <b>${clockTime(sun.set)}</b> (${Math.floor(sun.hours)} h ${String(Math.round((sun.hours % 1) * 60)).padStart(2, "0")} de jour). Une balade doit finir avant ${clockTime(new Date(sun.set.getTime() - 30 * 60000))}.</p>`);
+  const f = ferieIn(s.start, s.end); if (f && d.cc === "be") parts.push(`<p style="margin:0 0 6px">Le ${esc(dm(f.date))} est férié en Belgique (${esc(f.name)}) : tout horaire est à confirmer par téléphone.</p>`);
+  if (extra.weather === "far") parts.push(`<p class="muted" style="margin:0">Météo : les prévisions couvrent 16 jours ; revenez plus près du départ.</p>`);
+  else if (extra.weather === "fail") parts.push(`<p class="muted" style="margin:0">Météo indisponible pour l'instant.</p>`);
+  else if (extra.weather) parts.push(`<p style="margin:0">Météo (Open-Meteo) : ` + extra.weather.map(w => `${esc(dayLong(w.date))} ${Math.round(w.min)}–${Math.round(w.max)} °C, pluie ${w.pop ?? "?"} %`).join(" · ") + `</p>`);
+  $("ctxTitle").textContent = d.name; $("ctx").innerHTML = parts.join("");
+}
+function renderDeep() {
+  const s = cur, d = s.dest;
+  $("deep").innerHTML = `<a class="btnlink" href="${esc(P.links.booking(d.name, s.start, s.end > s.start ? s.end : addDays(s.start, 1)))}" target="_blank" rel="noopener">Hôtels sur Booking</a><a class="btnlink" href="${esc(P.links.mapsNear("hôtels", d.lat, d.lon))}" target="_blank" rel="noopener">Hôtels sur Maps</a><a class="btnlink" href="${esc(P.links.mapsNear("restaurants", d.lat, d.lon))}" target="_blank" rel="noopener">Restaurants sur Maps</a>`;
+}
+
+// ---- Recherche ------------------------------------------------------------------------
+function status(t, show = true) { $("status").hidden = !show; $("statusTxt").textContent = t; }
+async function search(s) {
+  const my = ++run; cur = s; result = null; $("out").hidden = false; renderCtx({}); renderDeep(); renderResult(); status("Recherche des lieux…");
+  const month = parse(s.start).getMonth(), noCamp = month >= 9 || month <= 2, d = s.dest, anchor = { lat: d.lat, lon: d.lon, cc: d.cc };
+  const days = Math.round((parse(s.start) - parse(iso(new Date()))) / MS);
+  const wx = days <= 15 && days >= 0 ? P.weather(d.lat, d.lon, s.start, s.end > addDays(s.start, 15) ? addDays(s.start, 15) : s.end).catch(() => "fail") : Promise.resolve(days > 15 ? "far" : null);
+  const ctxExtra = {};
+  P.drive(P.HOME, d).then(route => { if (my !== run) return; ctxExtra.route = route; renderCtx(ctxExtra); });
+  wx.then(w => { if (my !== run) return; ctxExtra.weather = w; renderCtx(ctxExtra); });
+  try {
+    const offP = d.cc === "be" ? P.official(d.lat, d.lon, s.radius) : d.cc === "lu" ? P.officialLu(d.lat, d.lon, s.radius).catch(() => []) : Promise.resolve([]);
+    const r = await P.fetchPlaces(d.lat, d.lon, s.radius, !noCamp, m => status(`Recherche des lieux… (serveur : ${new URL(m).hostname})`));
+    const off = await offP;
+    if (my !== run) return;
+    result = P.process(r.elements, anchor, { month, noCamp, radius: s.radius, now: new Date(), top: 6, official: off });
+    const n = result.total, offTxt = d.cc === "be" || d.cc === "lu" ? ` · base officielle ${d.cc === "lu" ? "Luxembourg for Tourism" : "Tourisme Wallonie"} : ${result.official.matched} lieux confirmés, ${result.official.added} ajoutés` : "", ex = Object.entries(result.drops).filter(([k]) => k !== "autre").map(([k, v]) => `${v} ${k}`).join(", ");
+    status(`${n} lieux trouvés dans OpenStreetMap${r.cached ? " (copie du " + new Date(r.ts).toLocaleDateString("fr-BE") + ")" : ""}${ex ? " · écartés : " + ex : ""}. Source : fiches OpenStreetMap, à confirmer avant de réserver.${offTxt}`);
+    renderResult();
+  } catch (e) { if (my === run) status("Impossible de joindre les serveurs de lieux (OpenStreetMap). Réessayez dans un moment ; les liens Booking et Maps ci-dessous fonctionnent quand même."); }
+}
+
+// ---- Formulaire -----------------------------------------------------------------------
+const err = m => { $("fErr").textContent = m; };
+function setForm(s) { $("fDest").value = s ? s.dest.name : ""; $("fStart").value = s ? s.start : ""; $("fEnd").value = s ? s.end : ""; $("fRadius").value = s ? String(s.radius) : "8"; $("formTitle").textContent = s ? "Séjour : " + s.dest.name : "Nouveau séjour"; }
+$("fStart").oninput = () => { if (!$("fEnd").value || $("fEnd").value < $("fStart").value) $("fEnd").value = $("fStart").value; $("fEnd").min = $("fStart").value; };
+let choosing = null;
+$("form").onsubmit = async e => {
+  e.preventDefault(); err("");
+  const q = $("fDest").value.trim(), a = $("fStart").value, b = $("fEnd").value, radius = Number($("fRadius").value) || 8;
+  if (!q) return err("Tapez une destination."); if (!a || !b) return err("Choisissez les dates."); if (b < a) return err("Le départ précède l'arrivée.");
+  $("fGo").disabled = true; err("Localisation…");
+  try {
+    const rows = await P.geocode(q); err("");
+    if (!rows.length) return err("Lieu introuvable : essayez avec la commune ou le pays (« Annecy, France »).");
+    if (rows.length === 1) return start(rows[0], a, b, radius);
+    choosing = { rows, a, b, radius };
+    $("fErr").innerHTML = `Plusieurs lieux possibles : <span class="dacts">` + rows.map((r, i) => `<button type="button" class="mini" data-pick="${i}">${esc(r.label.split(",").slice(0, 3).join(","))}</button>`).join("") + `</span>`;
+  } catch (x) { err("Impossible de localiser ce nom pour l'instant (Nominatim). Réessayez dans un moment."); }
+  finally { $("fGo").disabled = false; }
+};
+function start(row, a, b, radius) {
+  const existing = cur && cur.dest.lat === row.lat && cur.start === a && cur.end === b ? cur : null;
+  const s = existing || { id: "s" + Date.now().toString(36), dest: row, start: a, end: b, radius, kept: [], dropped: [], confirmed: {} };
+  s.radius = radius; if (!sejours.includes(s)) sejours.push(s);
+  persist(); renderList(); setForm(s); err(""); search(s); $("out").scrollIntoView({ block: "start" });
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || !cur && !b.dataset.open && !b.dataset.pick && !b.dataset.delsej) return; const d = b.dataset;
+  if (d.pick !== undefined && choosing) { const c = choosing; choosing = null; start(c.rows[d.pick], c.a, c.b, c.radius); return; }
+  if (d.open) { const s = sejours.find(x => x.id === d.open); if (s) { setForm(s); search(s); $("out").scrollIntoView({ block: "start" }); } return; }
+  if (d.delsej) { const s = sejours.find(x => x.id === d.delsej); if (s && confirm(`Supprimer le séjour ${s.dest.name} ?`)) { sejours = sejours.filter(x => x !== s); persist(); renderList(); if (cur === s) { cur = null; run++; $("out").hidden = true; setForm(null); } } return; }
+  const find = id => { for (const c of Object.keys(P.CATS)) for (const p of [...(result?.[c].top || []), ...(result?.[c].others || [])]) if (p.id === id) return p; return null; };
+  if (d.keep) { const p = find(d.keep); if (p && !cur.kept.some(k => k.id === p.id)) { cur.kept.push({ ...p, tags: undefined, min: p.min }); persist(); renderResult(); renderList(); } }
+  if (d.drop) { if (!cur.dropped.includes(d.drop)) cur.dropped.push(d.drop); persist(); renderResult(); }
+  if (d.unkeep) { cur.kept = cur.kept.filter(k => k.id !== d.unkeep); delete cur.confirmed[d.unkeep]; persist(); renderResult(); renderList(); }
+  if (d.confirm) { if (cur.confirmed[d.confirm]) delete cur.confirmed[d.confirm]; else cur.confirmed[d.confirm] = iso(new Date()); persist(); renderResult(); }
+});
+
+// ---- Ouverture : depuis une occasion de Sorties (?start=&end=) ou un séjour gardé (?id=) ----
+renderList();
+const q = new URLSearchParams(location.search), okDate = v => /^\d{4}-\d\d-\d\d$/.test(v || "");
+if (q.get("id") && sejours.find(s => s.id === q.get("id"))) { const s = sejours.find(x => x.id === q.get("id")); setForm(s); search(s); }
+else if (okDate(q.get("start"))) { $("fStart").value = q.get("start"); $("fEnd").value = okDate(q.get("end")) && q.get("end") >= q.get("start") ? q.get("end") : q.get("start"); $("fEnd").min = q.get("start"); }
+</script>
+</body>
+</html>

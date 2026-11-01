@@ -29,6 +29,13 @@
     return rows.map(r => ({ label: r.display_name, name: r.name || String(r.display_name).split(",")[0], lat: +r.lat, lon: +r.lon, cc: (r.address && r.address.country_code || "").toLowerCase(),
       kind: `${r.category || ""}/${r.type || ""}`, osm: r.osm_type && r.osm_id ? `https://www.openstreetmap.org/${r.osm_type}/${r.osm_id}` : "" }));
   }
+  // Nom mal orthographié ou inconnu de Nominatim : Photon (même base OpenStreetMap, tolère les fautes) ; les résultats sont alors « approchants » et l'utilisateur choisit
+  async function geocodeFuzzy(q) {
+    const d = await getJson("https://photon.komoot.io/api/?lang=fr&limit=5&q=" + encodeURIComponent(q), {}, 10000), T = { N: "node", W: "way", R: "relation" };
+    return (d.features || []).filter(f => f.geometry && f.geometry.coordinates && f.properties).map(f => { const x = f.properties, c = f.geometry.coordinates;
+      return { label: [x.name, x.city && x.city !== x.name ? x.city : "", x.state, x.country].filter(Boolean).join(", "), name: x.name || String(q), lat: +c[1], lon: +c[0], cc: String(x.countrycode || "").toLowerCase(), kind: `${x.osm_key || ""}/${x.osm_value || ""}`,
+        osm: T[x.osm_type] && x.osm_id ? `https://www.openstreetmap.org/${T[x.osm_type]}/${x.osm_id}` : "", approx: true }; });
+  }
   // Overpass : une seule requête pour les trois catégories, plusieurs serveurs essayés l'un après l'autre, cache de 7 jours
   function buildQuery(lat, lon, r, camp) {
     const a = `(around:${Math.round(r * 1000)},${lat},${lon})`;
@@ -211,5 +218,5 @@
     maps: (name, city) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + (city ? " " + city : ""))}`,
     mapsNear: (what, lat, lon) => `https://www.google.com/maps/search/${encodeURIComponent(what)}/@${lat},${lon},14z`
   };
-  g.Places = { official, officialLu, mergeOfficial, HOME, CATS, TYPE_FR, MIRRORS, norm, km, safeUrl, domain, geocode, buildQuery, fetchPlaces, drive, weather, sun, classify, seasonClosed, trust, normalize, dedupe, score, pick, process, why, links };
+  g.Places = { geocodeFuzzy, official, officialLu, mergeOfficial, HOME, CATS, TYPE_FR, MIRRORS, norm, km, safeUrl, domain, geocode, buildQuery, fetchPlaces, drive, weather, sun, classify, seasonClosed, trust, normalize, dedupe, score, pick, process, why, links };
 })(typeof window !== "undefined" ? window : globalThis);

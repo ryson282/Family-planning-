@@ -22,6 +22,7 @@
     <form id="form" autocomplete="off">
       <label class="dlgrow"><span>Destination (n'importe quel lieu)</span><input id="fDest" required maxlength="80" placeholder="Tournai, Müllerthal, Ninglinspo, Bruges…" enterkeyhint="search"></label>
       <div class="two"><label class="dlgrow"><span>Arrivée</span><input type="date" id="fStart" required></label><label class="dlgrow"><span>Départ</span><input type="date" id="fEnd" required></label></div>
+      <div class="two"><label class="dlgrow"><span>Arrivée sur place, à (heure)</span><input type="time" id="fArrive" value="10:00"></label><label class="dlgrow"><span>Départ du dernier jour, à (heure)</span><input type="time" id="fLeave" value="17:00"></label></div>
       <label class="dlgrow"><span>Rayon de recherche autour du lieu</span><select id="fRadius"><option value="5">5 km (ville)</option><option value="8" selected>8 km</option><option value="15">15 km (région)</option></select></label>
       <div class="dacts"><button class="primary" id="fGo">Chercher des lieux</button></div>
       <p class="muted" id="fErr" role="alert" aria-live="polite"></p>
@@ -31,6 +32,11 @@
     <section class="card" id="ctxBox">
       <h2 style="margin-top:0;font-size:1.1rem" id="ctxTitle"></h2>
       <div id="ctx"></div>
+    </section>
+    <section class="card" id="planBox" hidden>
+      <h2 style="margin-top:0;font-size:1.1rem">Programme proposé</h2>
+      <p class="muted" style="margin-top:0">Construit avec vos heures, le soleil, la météo et les lieux ci-dessous. <b>Écarter</b> remplace un lieu par le suivant, <b>Garder</b> le fixe. Les durées (~) et les trajets sont des estimations ; l'ouverture de chaque lieu est à confirmer.</p>
+      <div id="plan"></div>
     </section>
     <section class="card" id="keptBox" hidden>
       <h2 style="margin-top:0;font-size:1.1rem">Mon séjour</h2>
@@ -64,7 +70,7 @@ nav("o");
 const $ = id => document.getElementById(id), P = window.Places;
 const KEY = "sejours-v1";
 const load = () => { try { const a = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
-let sejours = load(), cur = null, run = 0, result = null;
+let sejours = load(), cur = null, run = 0, result = null, ctxShared = {};
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(sejours)); return true; } catch (e) { return false; } };
 const dm = k => fmt(parse(k)).replace(/^[^ ]+ /, "");
 const WD = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
@@ -107,6 +113,7 @@ function placeHtml(p, s, kept) {
 function renderResult() {
   const s = cur; if (!s) return; $("out").hidden = false;
   const drop = new Set(s.dropped), keep = new Set(s.kept.map(p => p.id));
+  renderPlan();
   $("keptBox").hidden = !s.kept.length;
   $("kept").innerHTML = s.kept.map(p => placeHtml(p, s, true)).join("");
   if (!result) { $("cats").innerHTML = ""; return; }
@@ -137,6 +144,45 @@ function renderDeep() {
   $("deep").innerHTML = `<a class="btnlink" href="${esc(P.links.booking(d.name, s.start, s.end > s.start ? s.end : addDays(s.start, 1)))}" target="_blank" rel="noopener">Hôtels sur Booking</a><a class="btnlink" href="${esc(P.links.mapsNear("hôtels", d.lat, d.lon))}" target="_blank" rel="noopener">Hôtels sur Maps</a><a class="btnlink" href="${esc(P.links.mapsNear("restaurants", d.lat, d.lon))}" target="_blank" rel="noopener">Restaurants sur Maps</a>`;
 }
 
+
+// ---- Programme jour par jour ------------------------------------------------------------
+const tm = m => `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+const dur = m => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + String(m % 60).padStart(2, "0") : ""}` : `${m} min`;
+const localMin = d => d.getHours() * 60 + d.getMinutes();
+function renderPlan() {
+  const s = cur, box = $("planBox"); if (!s || !result) { box.hidden = true; return; }
+  const drop = new Set(s.dropped), keptIds = new Set(s.kept.map(p => p.id));
+  const pool = c => { const ks = s.kept.filter(p => p.cat === c).map(p => ({ ...p, kept: true })), rest = [...result[c].top, ...result[c].others.filter(p => !p.warn.length)].filter(p => !drop.has(p.id) && !keptIds.has(p.id));
+    return [...ks, ...rest]; };
+  const wx = ctxShared.weather && ctxShared.weather.length ? Object.fromEntries(ctxShared.weather.map(w => [w.date, w])) : {};
+  const days = []; for (let k = s.start, n = 0; k <= s.end && n < 7; k = addDays(k, 1), n++) {
+    const sn = P.sun(k, s.dest.lat, s.dest.lon), w = wx[k];
+    days.push({ date: k, arrive: n === 0 ? s.arrive || "10:00" : "09:30", leave: s.leave || "17:00", sunrise: sn ? localMin(sn.rise) : null, sunset: sn ? localMin(sn.set) : null, rainy: !!w && ((w.pop || 0) >= 50 || (w.mm || 0) >= 3) });
+  }
+  const sleeps = pool("sleep").filter(p => p.type !== "hostel"), hotel = sleeps[0] || null;
+  const plan = P.plan(days, { see: pool("see"), eat: pool("eat"), sleep: sleeps }, { lat: s.dest.lat, lon: s.dest.lon }, hotel);
+  const place = (p, kind) => { const tp = esc(P.TYPE_FR[p.type] || p.type);
+    return `<b>${esc(p.name)}</b> <small>${tp}</small> ${trustHtml(p, s)}${p.official ? ' <span class="trust trust-ok">Officiel</span>' : ""}${placeLinks(p, s.dest.name)}`; };
+  const btn = p => keptIds.has(p.id) ? `<span class="dacts"><button class="mini" data-unkeep="${esc(p.id)}">Retirer</button></span>` : `<span class="dacts"><button class="mini" data-keep="${esc(p.id)}" aria-label="Garder ${esc(p.name)}">Garder</button><button class="mini" data-drop="${esc(p.id)}" aria-label="Écarter ${esc(p.name)}">Écarter</button></span>`;
+  const row = (when, html, acts) => `<li class="item plan"><span class="tm">${when}</span><span class="t">${html}</span>${acts || ""}</li>`;
+  box.hidden = false;
+  $("plan").innerHTML = plan.map(day => {
+    const w = wx[day.date], head = `<h3 class="dayh">${esc(dayLong(day.date))}</h3><p class="occ-note" style="margin:0 0 6px">${day.sunrise != null ? `lever ${tm(day.sunrise)}, coucher ${tm(day.sunset)}` : ""}${w ? ` · ${Math.round(w.min)}–${Math.round(w.max)} °C, pluie ${w.pop ?? "?"} %` : ""}${day.rainy ? " · pluie probable : lieux couverts d'abord" : ""}</p>`;
+    const li = day.items.map(it => {
+      if (it.kind === "arrive") return row(tm(it.t), `<b>Arrivée sur place</b>${day.first && ctxShared.route ? `<small class="note">environ ${dur(ctxShared.route.min)} de route depuis ${esc(P.HOME.name)}${ctxShared.route.est ? " (estimation)" : ""} : partir à ${tm(Math.max(0, it.t - ctxShared.route.min))}</small>` : ""}`);
+      if (it.kind === "morning") return row(tm(it.t), `<b>Matin</b>`);
+      if (it.kind === "visit") return row(`${tm(it.t)}–${tm(it.end)}`, `${place(it.p)}<small class="note">visite ~${dur(it.end - it.t)} (durée estimée) · trajet ~${dur(it.travel)} (estimation) · ouverture à confirmer</small>`, btn(it.p));
+      if (it.kind === "meal") return it.p ? row(`${tm(it.t)}–${tm(it.end)}`, `<b>${it.meal}</b> : ${place(it.p)}<small class="note">${it.travel ? "trajet ~" + dur(it.travel) + " (estimation) · " : ""}ouverture à confirmer (jour férié ?) : téléphonez et réservez</small>`, btn(it.p))
+        : row(tm(it.t), `<b>${it.meal}</b> : aucun restaurant bien renseigné<small class="note"><a href="${esc(P.links.mapsNear("restaurants", s.dest.lat, s.dest.lon))}" target="_blank" rel="noopener">Chercher sur Maps</a></small>`);
+      if (it.kind === "free") return row(`${tm(it.t)}–${tm(it.end)}`, `<span class="muted">Temps libre (aucun lieu bien renseigné à proposer)</span>`);
+      if (it.kind === "night") return row("Nuit", it.p ? `<b>Hébergement</b> : ${place(it.p)}<small class="note">à réserver : prix et chambres libres sur Booking (lien plus bas)</small>` : `<b>Hébergement à choisir</b><small class="note">voir « Où dormir » plus bas</small>`, it.p ? btn(it.p) : "");
+      if (it.kind === "leave") return row(tm(it.t), `<b>Départ</b>`);
+      return "";
+    }).join("");
+    return `<div class="planday">${head}<ul class="list">${li}</ul></div>`;
+  }).join("");
+}
+
 // ---- Recherche ------------------------------------------------------------------------
 function status(t, show = true) { $("status").hidden = !show; $("statusTxt").textContent = t; }
 async function search(s) {
@@ -144,24 +190,29 @@ async function search(s) {
   const month = parse(s.start).getMonth(), noCamp = month >= 9 || month <= 2, d = s.dest, anchor = { lat: d.lat, lon: d.lon, cc: d.cc };
   const days = Math.round((parse(s.start) - parse(iso(new Date()))) / MS);
   const wx = days <= 15 && days >= 0 ? P.weather(d.lat, d.lon, s.start, s.end > addDays(s.start, 15) ? addDays(s.start, 15) : s.end).catch(() => "fail") : Promise.resolve(days > 15 ? "far" : null);
-  const ctxExtra = {};
-  P.drive(P.HOME, d).then(route => { if (my !== run) return; ctxExtra.route = route; renderCtx(ctxExtra); });
-  wx.then(w => { if (my !== run) return; ctxExtra.weather = w; renderCtx(ctxExtra); });
+  const ctxExtra = ctxShared = {};
+  P.drive(P.HOME, d).then(route => { if (my !== run) return; ctxExtra.route = route; renderCtx(ctxExtra); if (result) renderPlan(); });
+  wx.then(w => { if (my !== run) return; ctxExtra.weather = w; renderCtx(ctxExtra); if (result) renderPlan(); });
   try {
     const offP = d.cc === "be" ? P.official(d.lat, d.lon, s.radius) : d.cc === "lu" ? P.officialLu(d.lat, d.lon, s.radius).catch(() => []) : Promise.resolve([]);
-    const r = await P.fetchPlaces(d.lat, d.lon, s.radius, !noCamp, m => status(`Recherche des lieux… (serveur : ${new URL(m).hostname})`));
-    const off = await offP;
+    let r = null, failed = null;
+    try { r = await P.fetchPlaces(d.lat, d.lon, s.radius, !noCamp, m => status(`Recherche des lieux… (serveur : ${new URL(m).hostname})`)); } catch (e) { failed = e; }
+    const off = await offP.catch(() => []);
     if (my !== run) return;
+    if (!r && !off.length) { status(`Aucun serveur de lieux n'a répondu${failed && failed.details && failed.details.length ? " (" + failed.details.join(" ; ") + ")" : ""}. Réessayez dans un moment ; les liens Booking et Maps ci-dessous fonctionnent quand même.`); return; }
+    if (!r) r = { elements: [], ts: Date.now(), cached: false };
     result = P.process(r.elements, anchor, { month, noCamp, radius: s.radius, now: new Date(), top: 6, official: off });
     const n = result.total, offTxt = d.cc === "be" || d.cc === "lu" ? ` · base officielle ${d.cc === "lu" ? "Luxembourg for Tourism" : "Tourisme Wallonie"} : ${result.official.matched} lieux confirmés, ${result.official.added} ajoutés` : "", ex = Object.entries(result.drops).filter(([k]) => k !== "autre").map(([k, v]) => `${v} ${k}`).join(", ");
-    status(`${n} lieux trouvés dans OpenStreetMap${r.cached ? " (copie du " + new Date(r.ts).toLocaleDateString("fr-BE") + ")" : ""}${ex ? " · écartés : " + ex : ""}. Source : fiches OpenStreetMap, à confirmer avant de réserver.${offTxt}`);
+    status(`${n} lieux trouvés${failed ? " dans la base officielle seulement : OpenStreetMap n'a pas répondu (" + ((failed.details || []).join(" ; ") || "délai dépassé") + ")" : " dans OpenStreetMap"}${r.cached ? " (copie du " + new Date(r.ts).toLocaleDateString("fr-BE") + ")" : ""}${ex ? " · écartés : " + ex : ""}. Source : fiches OpenStreetMap, à confirmer avant de réserver.${offTxt}`);
     renderResult();
-  } catch (e) { if (my === run) status("Impossible de joindre les serveurs de lieux (OpenStreetMap). Réessayez dans un moment ; les liens Booking et Maps ci-dessous fonctionnent quand même."); }
+  } catch (e) { if (my === run) status("Une erreur est survenue pendant la recherche (" + e.message + "). Réessayez dans un moment."); }
 }
 
 // ---- Formulaire -----------------------------------------------------------------------
 const err = m => { $("fErr").textContent = m; };
-function setForm(s) { $("fDest").value = s ? s.dest.name : ""; $("fStart").value = s ? s.start : ""; $("fEnd").value = s ? s.end : ""; $("fRadius").value = s ? String(s.radius) : "8"; $("formTitle").textContent = s ? "Séjour : " + s.dest.name : "Nouveau séjour"; }
+function setForm(s) { $("fDest").value = s ? s.dest.name : ""; $("fStart").value = s ? s.start : ""; $("fEnd").value = s ? s.end : ""; $("fRadius").value = s ? String(s.radius) : "8"; $("fArrive").value = s && s.arrive || "10:00"; $("fLeave").value = s && s.leave || "17:00"; $("formTitle").textContent = s ? "Séjour : " + s.dest.name : "Nouveau séjour"; }
+const retime = () => { if (cur) { cur.arrive = $("fArrive").value || "10:00"; cur.leave = $("fLeave").value || "17:00"; persist(); renderPlan(); } };
+$("fArrive").onchange = retime; $("fLeave").onchange = retime;
 $("fStart").oninput = () => { if (!$("fEnd").value || $("fEnd").value < $("fStart").value) $("fEnd").value = $("fStart").value; $("fEnd").min = $("fStart").value; };
 let choosing = null;
 $("form").onsubmit = async e => {
@@ -182,7 +233,7 @@ $("form").onsubmit = async e => {
 function start(row, a, b, radius) {
   const existing = cur && cur.dest.lat === row.lat && cur.start === a && cur.end === b ? cur : null;
   const s = existing || { id: "s" + Date.now().toString(36), dest: row, start: a, end: b, radius, kept: [], dropped: [], confirmed: {} };
-  s.radius = radius; if (!sejours.includes(s)) sejours.push(s);
+  s.radius = radius; s.arrive = $("fArrive").value || "10:00"; s.leave = $("fLeave").value || "17:00"; if (!sejours.includes(s)) sejours.push(s);
   persist(); renderList(); setForm(s); err(""); search(s); $("out").scrollIntoView({ block: "start" });
 }
 document.addEventListener("click", e => {

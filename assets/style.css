@@ -179,3 +179,15 @@ nav.tabs .plus{position:sticky;right:0;flex:0 0 52px;box-shadow:-8px 0 8px -4px 
    (sans cela, la ligne de boutons à 100 % écrasait le texte à 0 px : un caractère par ligne) */
 ul.list li:has(> .dacts){flex-wrap:wrap}
 ul.list li:has(> .dacts) > .t{flex:1 1 220px;min-width:0}
+
+/* Séjour : confiance, liens, boutons-liens */
+.trust{display:inline-block;font-size:.72rem;font-weight:700;padding:1px 8px;border-radius:99px;border:1.5px solid currentColor;white-space:nowrap;vertical-align:middle}
+.trust-ok{color:#1f7a43}.trust-conf{color:#8a5a00}.trust-non{color:#b42318}
+@media (prefers-color-scheme:dark){.trust-ok{color:#6fd49a}.trust-conf{color:#f3b46a}.trust-non{color:#ff8a7a}}
+.plinks{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px}.plinks a{color:var(--accent);padding:6px 0;min-height:32px;display:inline-flex;align-items:center}
+.note.warn{color:#8a5a00}@media (prefers-color-scheme:dark){.note.warn{color:#f3b46a}}
+a.btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:6px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--accent);text-decoration:none;font-weight:600}
+#deep{gap:8px}
+.item.place{align-items:flex-start}.item.place .dacts{flex-direction:column;align-items:stretch}.item.place .t{flex:1 1 220px;min-width:0}
+
+.item.place .occ-note{display:block}

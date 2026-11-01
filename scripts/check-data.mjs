@@ -140,6 +140,25 @@ try {
   readdirSync(".").filter(f => f.endsWith(".html") || f === "sw.js").forEach(f => { if (!deploy.includes(f)) err(".github/workflows/deploy-cloudflare.yml", `la page ${f} n'est pas copiée dans le site publié`); });
 } catch (e) { /* workflow absent : rien à contrôler */ }
 
+// Planificateur de séjour : la logique des lieux (assets/places.js) doit rester juste (soleil, filtres, doublons, confiance)
+try {
+  const pc = vm.createContext({ console, URL, localStorage: { getItem: () => null, setItem() {} } }); pc.window = pc; pc.globalThis = pc;
+  vm.runInContext(readFileSync("assets/places.js", "utf8"), pc, { filename: "assets/places.js" });
+  const P = pc.Places, st = P.sun("2026-11-10", 50.606, 3.389), mins = d => Math.round(d.getTime() / 60000) % 1440;
+  // Tournai, 10/11/2026 : lever 06:52 UTC, coucher 16:08 UTC (Open-Meteo : 07:52 et 17:07 heure locale), à 3 minutes près
+  if (!st || Math.abs(mins(st.rise) - (6 * 60 + 52)) > 3 || Math.abs(mins(st.set) - (16 * 60 + 8)) > 3) err("assets/places.js", "lever/coucher du soleil faux pour Tournai le 10/11/2026");
+  const el = (id, tags, lat = 50.6, lon = 3.4) => ({ type: "node", id, lat, lon, tags });
+  const res = P.process([
+    el(1, { tourism: "hotel", name: "Hôtel A", website: "https://a.example", phone: "+32 1 11 11" }), el(2, { tourism: "hotel", name: "Hotel A", website: "https://a.example" }, 50.6001, 3.4001),
+    el(3, { "disused:tourism": "hotel", name: "Ancien hôtel" }), el(4, { tourism: "camp_site", name: "Camping X", website: "https://c.example" }), el(5, { tourism: "attraction", name: "Borne n°4 de la Porallée" }),
+    el(6, { tourism: "hotel", name: "Internat Don Bosco", website: "https://d.example" }), el(7, { amenity: "restaurant", name: "Chez Lui", phone: "+32 2 22 22", opening_hours: "Mo-Su 12:00-14:00" })
+  ], { lat: 50.6, lon: 3.4, cc: "be" }, { month: 10, noCamp: true, radius: 8, now: new Date("2026-11-01") });
+  if (res.sleep.top.length !== 1) err("assets/places.js", `hébergements : 1 attendu (doublon, fermé, camping, internat écartés), ${res.sleep.top.length} obtenus`);
+  if (res.see.top.length + res.see.others.length) err("assets/places.js", "une borne frontière ne doit pas être proposée comme lieu à voir");
+  if (!res.eat.top.length || res.eat.top[0].trust.level === "ok") err("assets/places.js", "restaurant : confiance « vérifié » impossible sans date de contrôle");
+  if (P.seasonClosed("Apr-Oct: Mo-Su 10:00-18:00", 10) !== true || P.seasonClosed("Mo-Su 10:00-18:00", 10) !== false) err("assets/places.js", "horaire saisonnier mal reconnu");
+} catch (e) { err("assets/places.js", `exception : ${e.message}`); }
+
 // Péremption : prévenir bien avant la rentrée suivante
 const today = new Date().toISOString().slice(0, 10), plus = n => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 const lastEvent = (W.SCHOOL_EVENTS || []).reduce((m, e) => ((e.end || e.date || "") > m ? (e.end || e.date) : m), "");

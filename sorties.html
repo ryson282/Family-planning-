@@ -31,6 +31,7 @@
     <div class="chips2" role="group" aria-label="Type d'occasion" id="filters"></div>
     <ul class="list" id="slots"></ul>
     <div class="more" id="slotsMore"></div>
+    <p style="margin:8px 0 0"><a class="btnlink" href="sejour.html">Organiser un séjour (n'importe quelle destination)</a></p>
     <details class="dact"><summary>Comment sont calculées les occasions ?</summary>
       <p class="muted"><span class="occ occ-heures">Quelques heures</span> un soir de semaine, à partir de l'heure où vous êtes libres (activités d'Émilie, retour de Bruxelles, piscine, récupération de Louanne). <span class="occ occ-journee">Journée</span> un jour entier (un samedi ou un dimanche, un jour férié en semaine, ou un stage). <span class="occ occ-weekend">Week-end</span> le samedi et le dimanche, avec le vendredi soir. <span class="occ occ-escapade">Escapade</span> plusieurs jours de congé. Tout cela quand Adrian et Alixia sont chez l'autre parent, occupés par un stage, ou (« garde à confirmer ») chez vous avec Louanne ou Lukas à la maison. Les soirs où quelque chose est déjà prévu sont masqués ou signalés.</p>
     </details>
@@ -184,9 +185,11 @@ function occasions() {
   return out.sort((a, b) => a.date.localeCompare(b.date) || (a.type === "weekend" ? -1 : 0));
 }
 
+// Séjour : une journée précédée d'une soirée libre commence la veille au soir (une nuit dehors) ; sinon les dates de l'occasion
+const sejourHref = x => { const eve = x.type === "journee" && !x.end && occ.some(o => o.type === "heures" && o.date === addDays(x.date, -1) && !o.care); return `sejour.html?start=${eve ? addDays(x.date, -1) : x.date}&end=${x.end || x.date}`; };
 function occHtml(x, i) {
   const notes = [x.care ? "garde à confirmer (Louanne ou Lukas ?)" : "", x.fete, x.lana, x.warn].filter(Boolean).map(esc).join(" · ");
-  return `<li class="item occrow${x.care ? " gard" : ""}"><span class="t"><span class="top">${tag(x.type)}<b>${esc(x.label)}</b></span><span class="occ-note">${esc(x.sub)}${notes ? " · " + notes : ""}</span></span><button data-slot="${i}" class="mini" aria-label="Planifier : ${esc(TYPES[x.type])}, ${esc(x.label)}">Planifier</button></li>`;
+  return `<li class="item occrow${x.care ? " gard" : ""}"><span class="t"><span class="top">${tag(x.type)}<b>${esc(x.label)}</b></span><span class="occ-note">${esc(x.sub)}${notes ? " · " + notes : ""}</span></span><span class="dacts"><button data-slot="${i}" class="mini" aria-label="Planifier : ${esc(TYPES[x.type])}, ${esc(x.label)}">Planifier</button>${x.type === "heures" ? "" : `<a class="mini btnlink" href="${sejourHref(x)}" aria-label="Organiser un séjour : ${esc(x.label)}">Organiser un séjour</a>`}</span></li>`;
 }
 let occ = [];
 function render() {

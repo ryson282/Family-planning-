@@ -170,11 +170,12 @@ $("form").onsubmit = async e => {
   if (!q) return err("Tapez une destination."); if (!a || !b) return err("Choisissez les dates."); if (b < a) return err("Le départ précède l'arrivée.");
   $("fGo").disabled = true; err("Localisation…");
   try {
-    const rows = await P.geocode(q); err("");
-    if (!rows.length) return err("Lieu introuvable : essayez avec la commune ou le pays (« Annecy, France »).");
-    if (rows.length === 1) return start(rows[0], a, b, radius);
+    let rows = await P.geocode(q), approx = false; err("");
+    if (!rows.length) { err("Nom inconnu : recherche de lieux approchants…"); rows = await P.geocodeFuzzy(q).catch(() => []); approx = true; err(""); }
+    if (!rows.length) return err("Lieu introuvable : vérifiez l'orthographe ou ajoutez la commune ou le pays (« Annecy, France »).");
+    if (rows.length === 1 && !approx) return start(rows[0], a, b, radius);
     choosing = { rows, a, b, radius };
-    $("fErr").innerHTML = `Plusieurs lieux possibles : <span class="dacts">` + rows.map((r, i) => `<button type="button" class="mini" data-pick="${i}">${esc(r.label.split(",").slice(0, 3).join(","))}</button>`).join("") + `</span>`;
+    $("fErr").innerHTML = `${approx ? "Nom introuvable tel quel. Lieux approchants (vérifiez l'orthographe et le pays) :" : "Plusieurs lieux possibles :"} <span class="dacts">` + rows.map((r, i) => `<button type="button" class="mini" data-pick="${i}">${esc(r.label.split(",").slice(0, 4).join(","))}</button>`).join("") + `</span>`;
   } catch (x) { err("Impossible de localiser ce nom pour l'instant (Nominatim). Réessayez dans un moment."); }
   finally { $("fGo").disabled = false; }
 };

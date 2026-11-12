@@ -213,7 +213,9 @@ const err = m => { $("fErr").textContent = m; };
 function setForm(s) { $("fDest").value = s ? s.dest.name : ""; $("fStart").value = s ? s.start : ""; $("fEnd").value = s ? s.end : ""; $("fRadius").value = s ? String(s.radius) : "8"; $("fArrive").value = s && s.arrive || "10:00"; $("fLeave").value = s && s.leave || "17:00"; $("formTitle").textContent = s ? "Séjour : " + s.dest.name : "Nouveau séjour"; }
 const retime = () => { if (cur) { cur.arrive = $("fArrive").value || "10:00"; cur.leave = $("fLeave").value || "17:00"; persist(); renderPlan(); } };
 $("fArrive").onchange = retime; $("fLeave").onchange = retime;
-$("fStart").oninput = () => { if (!$("fEnd").value || $("fEnd").value < $("fStart").value) $("fEnd").value = $("fStart").value; $("fEnd").min = $("fStart").value; };
+// Aucune date n'est bloquée : choisir une arrivée après le départ (ou un départ avant l'arrivée) déplace l'autre date
+$("fStart").oninput = () => { if (!$("fEnd").value || $("fEnd").value < $("fStart").value) $("fEnd").value = $("fStart").value; };
+$("fEnd").oninput = () => { if ($("fEnd").value && $("fStart").value && $("fEnd").value < $("fStart").value) $("fStart").value = $("fEnd").value; };
 let choosing = null;
 $("form").onsubmit = async e => {
   e.preventDefault(); err("");
@@ -252,7 +254,7 @@ document.addEventListener("click", e => {
 renderList();
 const q = new URLSearchParams(location.search), okDate = v => /^\d{4}-\d\d-\d\d$/.test(v || "");
 if (q.get("id") && sejours.find(s => s.id === q.get("id"))) { const s = sejours.find(x => x.id === q.get("id")); setForm(s); search(s); }
-else if (okDate(q.get("start"))) { $("fStart").value = q.get("start"); $("fEnd").value = okDate(q.get("end")) && q.get("end") >= q.get("start") ? q.get("end") : q.get("start"); $("fEnd").min = q.get("start"); }
+else if (okDate(q.get("start"))) { $("fStart").value = q.get("start"); $("fEnd").value = okDate(q.get("end")) && q.get("end") >= q.get("start") ? q.get("end") : q.get("start"); }
 </script>
 </body>
 </html>
